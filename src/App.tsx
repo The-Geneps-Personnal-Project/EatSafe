@@ -1,10 +1,9 @@
-import Text from "./components/UI/Text/Text";
+import React from "react";
+import MapWrapper from "./components/Map/MapWrapper";
 
 const App = () => {
     return (
-        <div>
-            <Text variant="h1">Hello Map Project</Text>
-        </div>
+        <MapWrapper />
     );
 };
 
