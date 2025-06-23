@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import {
     GoogleMap,
     LoadScript,
@@ -24,6 +24,8 @@ const center = {
 };
 
 const MapWrapper = () => {
+    const mapRef = useRef<google.maps.Map | null>(null);
+
     const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
     const [dataLoaded, setDataLoaded] = useState(false);
 
@@ -32,6 +34,10 @@ const MapWrapper = () => {
 
     const handleSearchSelect = (restaurant: Restaurant) => {
         setSelectedRestaurant(restaurant);
+        if (mapRef.current) {
+            mapRef.current.panTo({ lat: restaurant.lat, lng: restaurant.lng });
+            mapRef.current.setZoom(16);
+        }
     };
 
     // Simulate data loading while fetching part is not implemented
@@ -49,6 +55,7 @@ const MapWrapper = () => {
                 mapContainerStyle={containerStyle}
                 center={center}
                 zoom={6}
+                onLoad={(map) => { mapRef.current = map }}
                 options={{
                     disableDefaultUI: true,
                     zoomControl: true,
