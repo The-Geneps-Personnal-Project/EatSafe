@@ -5,13 +5,14 @@ import {
     Marker,
     MarkerClusterer
 } from "@react-google-maps/api";
+import { useTheme, useMediaQuery, Box, Typography } from "@mui/material";
 import { mockRestaurants } from "../../utils/mockRestaurants";
 import { getSymbolIcon } from "../../utils/markerColors";
 import { Restaurant } from "../../types/restaurant";
 import RestaurantCard from "../UI/Card/RestaurantCard";
 import Spinner from "../UI/Spinner/Spinner";
-import { useTheme, useMediaQuery, Box, Typography } from "@mui/material";
 import SearchBar from "../UI/SearchBar/SearchBar";
+import { usePlaceDetails } from "../../hooks/usePlaceDetails";
 
 const containerStyle = {
     width: "100%",
@@ -26,12 +27,16 @@ const center = {
 const MapWrapper = () => {
     const mapRef = useRef<google.maps.Map | null>(null);
 
-    const [fallbackMarker, setFallbackMarker] = useState<google.maps.LatLngLiteral | null>(null);
+    // const [fallbackMarker, setFallbackMarker] = useState<google.maps.LatLngLiteral | null>(null);
+    const [googlePlace, setGooglePlace] = useState<google.maps.places.PlaceResult | null>(null);
+
     const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
     const [dataLoaded, setDataLoaded] = useState(false);
 
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+
+    const { fetchPlaceDetails } = usePlaceDetails();
 
     const handleSearchSelect = (restaurant: Restaurant) => {
         setSelectedRestaurant(restaurant);
@@ -41,32 +46,29 @@ const MapWrapper = () => {
         }
     };
 
-    const handleFallbackSearch = (query: string) => {
-        const service = new google.maps.places.PlacesService(mapRef.current!);
-        service.findPlaceFromQuery(
-            {
-                query,
-                fields: ["geometry", "name"]
-            },
-            (results, status) => {
-                if (
-                    status === google.maps.places.PlacesServiceStatus.OK &&
-                    results &&
-                    results[0].geometry?.location
-                ) {
-                    const loc = results[0].geometry.location;
-                    const position = {
-                        lat: loc.lat(),
-                        lng: loc.lng()
-                    };
-                    mapRef.current?.panTo(position);
-                    mapRef.current?.setZoom(16);
-                    setFallbackMarker(position);
+    const handleFallbackSearch = async (query: string) => {
+        if (!window.google) return;
+
+        const autocompleteService = new window.google.maps.places.AutocompleteService();
+        autocompleteService.getPlacePredictions(
+            { input: query, componentRestrictions: { country: "fr" } },
+            async (predictions, status) => {
+                if (status !== window.google.maps.places.PlacesServiceStatus.OK || !predictions?.[0]) return;
+                const place = await fetchPlaceDetails(predictions[0].place_id);
+                if (!place?.geometry?.location) return;
+                const position = place.geometry.location;
+                mapRef.current?.panTo(position);
+                mapRef.current?.setZoom(15);
+                if (place.types?.includes("restaurant")) {
+                    setGooglePlace(place);
+                } else {
+                    setGooglePlace(null);
                 }
+                setSelectedRestaurant(null);
             }
         );
     };
-
+    
     // Simulate data loading while fetching part is not implemented
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -77,10 +79,6 @@ const MapWrapper = () => {
 
     return (
         <LoadScript googleMapsApiKey={process.env.REACT_APP_GOOGLE_MAPS_API_KEY as string} libraries={["places"]}>
-            <SearchBar
-                onSelect={handleSearchSelect}
-                onFallbackSearch={handleFallbackSearch}
-            />            
             <GoogleMap
                 mapContainerStyle={containerStyle}
                 center={center}
@@ -94,6 +92,16 @@ const MapWrapper = () => {
                     fullscreenControl: false
                 }}
             >
+                <SearchBar
+                    onSelect={(restaurant) => {
+                        mapRef.current?.panTo({ lat: restaurant.lat, lng: restaurant.lng });
+                        mapRef.current?.setZoom(15);
+                        setSelectedRestaurant(restaurant);
+                        setGooglePlace(null);
+                    }}
+                    onFallbackSearch={handleFallbackSearch}
+                />
+
                 {dataLoaded && (
                     <>
                         <MarkerClusterer>
@@ -106,30 +114,35 @@ const MapWrapper = () => {
                                             icon={getSymbolIcon(restaurant.rating)}
                                             clusterer={clusterer}
                                             title={restaurant.name}
-                                            onClick={() => setSelectedRestaurant(restaurant)}
+                                            onClick={() => {
+                                                setSelectedRestaurant(restaurant);
+                                                setGooglePlace(null);
+                                                if (mapRef.current) {
+                                                    mapRef.current.panTo({ lat: restaurant.lat, lng: restaurant.lng });
+                                                    mapRef.current.setZoom(16);
+                                                }
+                                            }}
                                         />
                                     ))}
                                 </>
                             )}
                         </MarkerClusterer>
-                        {fallbackMarker && (
-                            <Marker
-                                position={fallbackMarker}
-                                icon={{
-                                    path: google.maps.SymbolPath.CIRCLE,
-                                    fillColor: "#000",
-                                    fillOpacity: 0.8,
-                                    strokeColor: "#fff",
-                                    strokeWeight: 1,
-                                    scale: 8
-                                }}
-                            />
-                        )}
+
                         {selectedRestaurant && (
                             <RestaurantCard
                                 restaurant={selectedRestaurant}
                                 onClose={() => setSelectedRestaurant(null)}
                                 isMobile={isMobile}
+                            />
+                        )}
+
+                        {googlePlace?.geometry?.location && (
+                            <Marker
+                                position={{
+                                    lat: googlePlace.geometry.location.lat(),
+                                    lng: googlePlace.geometry.location.lng()
+                                }}
+                                title={googlePlace.name}
                             />
                         )}
                     </>
