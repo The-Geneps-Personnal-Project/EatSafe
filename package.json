@@ -48,6 +48,7 @@
     "@mui/icons-material": "^7.1.2",
     "@mui/material": "^7.1.2",
     "@types/lodash.debounce": "^4.0.9",
+    "@types/papaparse": "^5.3.16",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "tsconfig-paths-webpack-plugin": "^4.2.0",

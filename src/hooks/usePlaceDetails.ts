@@ -14,7 +14,7 @@ export const usePlaceDetails = () => {
             serviceRef.current.getDetails(
                 {
                     placeId,
-                    fields: ["name", "geometry", "rating", "formatted_address", "photos", "types", "place_id"]
+                    fields: ["name", "geometry", "rating", "formatted_address", "photos", "types", "place_id", "reviews"]
                 },
                 (place, status) => {
                     if (status !== google.maps.places.PlacesServiceStatus.OK || !place) {

@@ -9,6 +9,7 @@ import {
 import { useState } from "react";
 import CloseIcon from "@mui/icons-material/Close";
 import type { Restaurant } from "@schemas/restaurant";
+import { formatDate } from "@utils/format";
 import RatingChip from "./RatingChip";
 import GoogleRating from "./GoogleRating";
 import PhotosSlider from "./PhotosSlider";
@@ -68,7 +69,18 @@ const RestaurantCard = ({ restaurant, onClose, isMobile }: Props) => {
                 )}
             </Box>
 
-            <RatingChip score={restaurant.local_rating} />
+            {(restaurant.fromLocalDataset && restaurant.local_rating) ? (
+                <>
+                    <RatingChip score={restaurant.local_rating} />
+                    <Typography variant="body2" mt={1}>
+                        🧪 Inspection : {restaurant.inspection_date ? formatDate(restaurant.inspection_date) : "N/A"}
+                    </Typography>
+                </>
+            ) : (
+                <Typography variant="body2" color="text.primary" mt={1}>
+                    Aucune donnée sanitaire trouvée
+                </Typography>
+            )}
 
             {restaurant.google_rating && (
                 <GoogleRating rating={restaurant.google_rating} />
@@ -80,8 +92,8 @@ const RestaurantCard = ({ restaurant, onClose, isMobile }: Props) => {
                 </Typography>
             )}
 
-            {restaurant.photos && <PhotosSlider photos={restaurant.photos} />}
             <ReviewsSection />
+            {restaurant.photos && <PhotosSlider photos={restaurant.photos} />}
         </Box>
     );
 

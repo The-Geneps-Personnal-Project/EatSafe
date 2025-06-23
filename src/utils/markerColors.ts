@@ -1,17 +1,11 @@
-export const getSymbolIcon = (rating: number): google.maps.Symbol => {
-    const colorMap: Record<number, string> = {
-        1: "#2196f3", // blue
-        2: "#4caf50", // green
-        3: "#ff9800", // orange
-        4: "#f44336"  // red
+export const getSymbolIcon = (rating: 1 | 2 | 3 | 4): string => {
+    const baseUrl = "/pins";
+    const colorMap: Record<1 | 2 | 3 | 4, string> = {
+        1: "blue",
+        2: "green",
+        3: "orange",
+        4: "red"
     };
 
-    return {
-        path: window.google.maps.SymbolPath.CIRCLE,
-        scale: 8,
-        fillColor: colorMap[rating] || "#9c27b0", // Default color map for google
-        fillOpacity: 1,
-        strokeWeight: 1,
-        strokeColor: "#ffffff"
-    };
+    return `${baseUrl}/pin-${colorMap[rating]}.svg`;
 };

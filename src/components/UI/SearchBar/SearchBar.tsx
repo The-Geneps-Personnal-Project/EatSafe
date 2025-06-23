@@ -10,7 +10,7 @@ type Option =
     | { type: "google"; label: string; placeId: string };
 
 type Props = {
-    onSelect: (restaurant: Restaurant) => void; // Local search
+    onSelect: (restaurant: Restaurant, zoom?: number) => void; // Local search
     onFallbackSearch: (query: string) => void; // Fallback search on google maps API
 };
 

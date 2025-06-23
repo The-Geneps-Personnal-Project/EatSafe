@@ -1,17 +1,36 @@
-// src/hooks/useMapHandlers.ts
 import { useRef, useState } from "react";
+import { getPlaceDetailsByTextSearch, mergeWithLocalIfPossible } from "@utils/matchUtils";
 import type { Restaurant } from "@schemas/restaurant";
 import { usePlaceDetails } from "@hooks/usePlaceDetails";
-import { mergeWithLocal } from "@/utils/mergeWithLocal";
+import { useRestaurantsData } from "./useRestaurantsData";
 
 export const useMapHandlers = () => {
     const mapRef = useRef<google.maps.Map | null>(null);
-    const { setMapElement, getPlaceDetails } = usePlaceDetails();
     const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
+    const { getPlaceDetails, setMapElement } = usePlaceDetails();
+    const { restaurants } = useRestaurantsData();
 
-    const handleSelect = (restaurant: Restaurant) => {
-        setSelectedRestaurant(restaurant);
-        if (mapRef.current) {
+    const handleSelect = async (restaurant: Restaurant, zoom?: number) => {
+            let enriched = restaurant;
+
+        if (!restaurant.google_rating && !restaurant.photos) {
+            try {
+                const place = await getPlaceDetailsByTextSearch(restaurant.name, restaurant.lat, restaurant.lng);
+                if (place) {
+                    enriched = {
+                        ...restaurant,
+                        google_rating: place.rating,
+                        photos: place.photos,
+                        address: place.formatted_address || restaurant.address
+                    };
+                }
+            } catch (e) {
+                console.warn("No matching Google place found for:", restaurant.name);
+            }
+        }
+
+        setSelectedRestaurant(enriched);
+        if (mapRef.current && !(zoom! >= 16)) {
             mapRef.current.panTo({ lat: restaurant.lat, lng: restaurant.lng });
             mapRef.current.setZoom(16);
         }
@@ -24,23 +43,25 @@ export const useMapHandlers = () => {
                 const lat = place.geometry.location.lat();
                 const lng = place.geometry.location.lng();
 
-                const enriched = mergeWithLocal({
-                    id: place.place_id ?? "google-place",
-                    name: place.name ?? placeId,
+                const merged = mergeWithLocalIfPossible(restaurants, {
                     lat,
                     lng,
+                    name: place.name || "Inconnu",
                     google_rating: place.rating,
+                    reviews: place.reviews,
                     address: place.formatted_address,
                     photos: place.photos
                 });
 
-                setSelectedRestaurant(enriched);
+                setSelectedRestaurant(merged);
 
-                mapRef.current?.panTo({ lat, lng });
-                mapRef.current?.setZoom(16);
+                if (mapRef.current) {
+                    mapRef.current.panTo({ lat, lng });
+                    mapRef.current.setZoom(16);
+                }
             }
         } catch (e) {
-            console.error("Failed to fetch place details", e);
+            console.error("Fallback search error", e);
         }
     };
 
