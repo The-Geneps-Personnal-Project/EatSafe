@@ -1,8 +1,8 @@
 import { useMemo, useState, useEffect } from "react";
 import { Autocomplete, Box, TextField } from "@mui/material";
-import { mockRestaurants } from "../../../utils/mockRestaurants";
-import { Restaurant } from "../../../types/restaurant";
-import { useAutocompleteService } from "../../../hooks/useAutoCompleteService";
+import { mockRestaurants } from "@utils/mockRestaurants";
+import type { Restaurant } from "@schemas/restaurant";
+import { useAutocompleteService } from "@hooks/useAutoCompleteService";
 import debounce from "lodash.debounce";
 
 type Option =
@@ -61,10 +61,11 @@ const SearchBar = ({ onSelect, onFallbackSearch }: Props) => {
                 onInputChange={(_, value) => setInputValue(value)}
                 onChange={(_, value) => {
                     if (!value || typeof value === "string") return;
+
                     if (value.type === "local") {
                         onSelect(value.restaurant);
                     } else if (value.type === "google") {
-                        onFallbackSearch(value.label);
+                        onFallbackSearch(value.placeId);
                     }
                 }}
                 renderInput={(params) => (

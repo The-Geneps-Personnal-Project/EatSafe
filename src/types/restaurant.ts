@@ -1,7 +1,8 @@
 export type Restaurant = {
     id: string;
     name: string;
-    rating: 1 | 2 | 3 | 4;
+    local_rating: 1 | 2 | 3 | 4;
+    google_rating?: number;
     lat: number;
     lng: number;
 };

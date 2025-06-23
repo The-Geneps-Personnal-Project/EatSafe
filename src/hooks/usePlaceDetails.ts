@@ -1,29 +1,30 @@
-import { useCallback } from "react";
+import { useRef } from "react";
 
 export const usePlaceDetails = () => {
-    const fetchPlaceDetails = useCallback((placeId: string): Promise<google.maps.places.PlaceResult | null> => {
-        return new Promise((resolve, reject) => {
-            if (!window.google) {
-                reject("Google Maps JS SDK not loaded");
-                return;
-            }
+    const serviceRef = useRef<google.maps.places.PlacesService | null>(null);
 
-            const service = new window.google.maps.places.PlacesService(document.createElement("div"));
-            service.getDetails(
+    const setMapElement = (map: google.maps.Map) => {
+        serviceRef.current = new google.maps.places.PlacesService(map);
+    };
+
+    const getPlaceDetails = (placeId: string): Promise<google.maps.places.PlaceResult | null> => {
+        return new Promise((resolve) => {
+            if (!serviceRef.current) return resolve(null);
+
+            serviceRef.current.getDetails(
                 {
                     placeId,
-                    fields: ["name", "geometry", "rating", "formatted_address", "photos", "types"]
+                    fields: ["name", "geometry", "rating", "formatted_address", "photos", "types", "place_id"]
                 },
                 (place, status) => {
-                    if (status === window.google.maps.places.PlacesServiceStatus.OK && place?.geometry?.location) {
-                        resolve(place);
-                    } else {
-                        resolve(null);
+                    if (status !== google.maps.places.PlacesServiceStatus.OK || !place) {
+                        return resolve(null);
                     }
+                    resolve(place);
                 }
             );
         });
-    }, []);
+    };
 
-    return { fetchPlaceDetails };
+    return { setMapElement, getPlaceDetails };
 };

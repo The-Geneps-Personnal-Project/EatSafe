@@ -9,7 +9,7 @@ import {
     SwipeableDrawer
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import { Restaurant } from "../../../types/restaurant";
+import type { Restaurant } from "@schemas/restaurant";
 
 type Props = {
     restaurant: Restaurant;
@@ -49,7 +49,7 @@ const RestaurantCard = ({ restaurant, onClose, isMobile }: Props) => {
             {isExpanded && (
                 <CardContent>
                     <Typography variant="h6">{restaurant.name}</Typography>
-                    <Typography variant="body2">Rating: {restaurant.rating}/4</Typography>
+                    <Typography variant="body2">Rating: {restaurant.local_rating}/4</Typography>
                     <Typography variant="body2">
                         Coordinates: {restaurant.lat}, {restaurant.lng}
                     </Typography>
@@ -102,7 +102,7 @@ const RestaurantCard = ({ restaurant, onClose, isMobile }: Props) => {
                     </IconButton>
                     <CardContent>
                         <Typography variant="h6">{restaurant.name}</Typography>
-                        <Typography variant="body2">Rating: {restaurant.rating}/4</Typography>
+                        <Typography variant="body2">Rating: {restaurant.local_rating}/4</Typography>
                         <Typography variant="body2">
                             Coordinates: {restaurant.lat}, {restaurant.lng}
                         </Typography>

@@ -9,7 +9,7 @@ export const getSymbolIcon = (rating: number): google.maps.Symbol => {
     return {
         path: window.google.maps.SymbolPath.CIRCLE,
         scale: 8,
-        fillColor: colorMap[rating] || "#9c27b0",
+        fillColor: colorMap[rating] || "#9c27b0", // Default color map for google
         fillOpacity: 1,
         strokeWeight: 1,
         strokeColor: "#ffffff"

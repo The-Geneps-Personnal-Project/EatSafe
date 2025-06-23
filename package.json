@@ -18,9 +18,9 @@
     "web-vitals": "^2.1.0"
   },
   "scripts": {
-    "start": "react-scripts start",
-    "build": "react-scripts build",
-    "test": "react-scripts test",
+    "start": "craco start",
+    "build": "craco build",
+    "test": "craco test",
     "eject": "react-scripts eject"
   },
   "eslintConfig": {
@@ -42,6 +42,7 @@
     ]
   },
   "devDependencies": {
+    "@craco/craco": "^7.1.0",
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
     "@mui/icons-material": "^7.1.2",
@@ -49,6 +50,7 @@
     "@types/lodash.debounce": "^4.0.9",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
+    "tsconfig-paths-webpack-plugin": "^4.2.0",
     "typescript": "^5.8.3"
   }
 }
