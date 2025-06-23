@@ -4,8 +4,13 @@ import {
     Marker,
     MarkerClusterer
 } from "@react-google-maps/api";
+import { useState } from "react";
+import { useTheme, useMediaQuery } from "@mui/material";
 import { mockRestaurants } from "../../utils/mockRestaurants";
 import { getSymbolIcon } from "../../utils/markerColors";
+import { Restaurant } from "../../types/restaurant";
+import RestaurantCard from "../UI/Card/RestaurantCard";
+
 
 const containerStyle = {
     width: "100%",
@@ -18,6 +23,10 @@ const center = {
 };
 
 const MapWrapper = () => {
+    const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
+    const theme = useTheme();
+    const isMobile = useMediaQuery(theme.breakpoints.down("md"));
+
     return (
         <LoadScript googleMapsApiKey={process.env.REACT_APP_GOOGLE_MAPS_API_KEY as string}>
             <GoogleMap
@@ -25,6 +34,13 @@ const MapWrapper = () => {
                 center={center}
                 zoom={6}
             >
+            {selectedRestaurant && (
+                <RestaurantCard
+                    restaurant={selectedRestaurant}
+                    onClose={() => setSelectedRestaurant(null)}
+                    isMobile={isMobile}
+                />
+            )}
                 <MarkerClusterer>
                     {(clusterer) => (
                         <>
@@ -35,6 +51,7 @@ const MapWrapper = () => {
                                     icon={getSymbolIcon(restaurant.rating)}
                                     clusterer={clusterer}
                                     title={restaurant.name}
+                                    onClick={() => setSelectedRestaurant(restaurant)}
                                 />
                             ))}
                         </>
