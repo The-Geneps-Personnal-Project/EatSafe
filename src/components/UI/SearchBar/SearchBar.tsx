@@ -4,10 +4,11 @@ import { mockRestaurants } from "../../../utils/mockRestaurants";
 import { Restaurant, RestaurantOption } from "../../../types/restaurant";
 
 type Props = {
-    onSelect: (restaurant: Restaurant) => void;
+    onSelect: (restaurant: Restaurant) => void; // Local search
+    onFallbackSearch: (query: string) => void; // Fallback search on google maps API
 };
 
-const SearchBar = ({ onSelect }: Props) => {
+const SearchBar = ({ onSelect, onFallbackSearch }: Props) => {
     const options: RestaurantOption[] = useMemo(() => {
         return mockRestaurants.map((r) => ({
             label: r.name,
@@ -36,7 +37,9 @@ const SearchBar = ({ onSelect }: Props) => {
                     typeof option === "string" ? option : option.label
                 }
                 onChange={(e, value) => {
-                    if (typeof value !== "string" && value?.restaurant) {
+                    if (typeof value === "string") {
+                        onFallbackSearch(value);
+                    } else if (value?.restaurant) {
                         onSelect(value.restaurant);
                     }
                 }}

@@ -26,6 +26,7 @@ const center = {
 const MapWrapper = () => {
     const mapRef = useRef<google.maps.Map | null>(null);
 
+    const [fallbackMarker, setFallbackMarker] = useState<google.maps.LatLngLiteral | null>(null);
     const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
     const [dataLoaded, setDataLoaded] = useState(false);
 
@@ -40,6 +41,32 @@ const MapWrapper = () => {
         }
     };
 
+    const handleFallbackSearch = (query: string) => {
+        const service = new google.maps.places.PlacesService(mapRef.current!);
+        service.findPlaceFromQuery(
+            {
+                query,
+                fields: ["geometry", "name"]
+            },
+            (results, status) => {
+                if (
+                    status === google.maps.places.PlacesServiceStatus.OK &&
+                    results &&
+                    results[0].geometry?.location
+                ) {
+                    const loc = results[0].geometry.location;
+                    const position = {
+                        lat: loc.lat(),
+                        lng: loc.lng()
+                    };
+                    mapRef.current?.panTo(position);
+                    mapRef.current?.setZoom(16);
+                    setFallbackMarker(position);
+                }
+            }
+        );
+    };
+
     // Simulate data loading while fetching part is not implemented
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -49,8 +76,11 @@ const MapWrapper = () => {
     }, []);
 
     return (
-        <LoadScript googleMapsApiKey={process.env.REACT_APP_GOOGLE_MAPS_API_KEY as string}>
-            <SearchBar onSelect={handleSearchSelect} />            
+        <LoadScript googleMapsApiKey={process.env.REACT_APP_GOOGLE_MAPS_API_KEY as string} libraries={["places"]}>
+            <SearchBar
+                onSelect={handleSearchSelect}
+                onFallbackSearch={handleFallbackSearch}
+            />            
             <GoogleMap
                 mapContainerStyle={containerStyle}
                 center={center}
@@ -82,6 +112,19 @@ const MapWrapper = () => {
                                 </>
                             )}
                         </MarkerClusterer>
+                        {fallbackMarker && (
+                            <Marker
+                                position={fallbackMarker}
+                                icon={{
+                                    path: google.maps.SymbolPath.CIRCLE,
+                                    fillColor: "#000",
+                                    fillOpacity: 0.8,
+                                    strokeColor: "#fff",
+                                    strokeWeight: 1,
+                                    scale: 8
+                                }}
+                            />
+                        )}
                         {selectedRestaurant && (
                             <RestaurantCard
                                 restaurant={selectedRestaurant}
