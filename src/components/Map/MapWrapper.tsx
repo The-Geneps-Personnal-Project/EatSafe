@@ -30,6 +30,10 @@ const MapWrapper = () => {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
+    const handleSearchSelect = (restaurant: Restaurant) => {
+        setSelectedRestaurant(restaurant);
+    };
+
     // Simulate data loading while fetching part is not implemented
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -40,7 +44,7 @@ const MapWrapper = () => {
 
     return (
         <LoadScript googleMapsApiKey={process.env.REACT_APP_GOOGLE_MAPS_API_KEY as string}>
-            <SearchBar />
+            <SearchBar onSelect={handleSearchSelect} />            
             <GoogleMap
                 mapContainerStyle={containerStyle}
                 center={center}

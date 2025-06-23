@@ -5,3 +5,8 @@ export type Restaurant = {
     lat: number;
     lng: number;
 };
+
+export type RestaurantOption = {
+    label: string;
+    restaurant: Restaurant;
+};
