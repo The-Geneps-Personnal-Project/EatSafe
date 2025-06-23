@@ -18,6 +18,10 @@ const center = {
     lng: 1.888334
 };
 
+const googleLibraries: (
+    "places" | "drawing" | "geometry" | "visualization"
+)[] = ["places"];
+
 const MapWrapper = () => {
     const [dataLoaded, setDataLoaded] = useState(false);
     const theme = useTheme();
@@ -42,7 +46,7 @@ const MapWrapper = () => {
     }, []);
 
     return (
-        <LoadScript googleMapsApiKey={key as string} libraries={["places"]}>
+        <LoadScript googleMapsApiKey={key as string} libraries={googleLibraries}>
             <GoogleMap
                 mapContainerStyle={containerStyle}
                 center={center}

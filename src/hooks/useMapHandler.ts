@@ -2,6 +2,7 @@
 import { useRef, useState } from "react";
 import type { Restaurant } from "@schemas/restaurant";
 import { usePlaceDetails } from "@hooks/usePlaceDetails";
+import { mergeWithLocal } from "@/utils/mergeWithLocal";
 
 export const useMapHandlers = () => {
     const mapRef = useRef<google.maps.Map | null>(null);
@@ -22,16 +23,18 @@ export const useMapHandlers = () => {
             if (place && place.geometry?.location) {
                 const lat = place.geometry.location.lat();
                 const lng = place.geometry.location.lng();
-                setSelectedRestaurant({
-                    id: "google-place",
-                    name: place.name || placeId,
+
+                const enriched = mergeWithLocal({
+                    id: place.place_id ?? "google-place",
+                    name: place.name ?? placeId,
                     lat,
                     lng,
-                    local_rating: [1, 2, 3, 4].includes(Math.round(place.rating || 1))
-                        ? (Math.round(place.rating || 1) as 1 | 2 | 3 | 4)
-                        : 1,
-                    google_rating: place.rating
+                    google_rating: place.rating,
+                    address: place.formatted_address,
+                    photos: place.photos
                 });
+
+                setSelectedRestaurant(enriched);
 
                 mapRef.current?.panTo({ lat, lng });
                 mapRef.current?.setZoom(16);
