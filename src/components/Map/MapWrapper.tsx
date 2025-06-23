@@ -11,6 +11,7 @@ import { Restaurant } from "../../types/restaurant";
 import RestaurantCard from "../UI/Card/RestaurantCard";
 import Spinner from "../UI/Spinner/Spinner";
 import { useTheme, useMediaQuery, Box, Typography } from "@mui/material";
+import SearchBar from "../UI/SearchBar/SearchBar";
 
 const containerStyle = {
     width: "100%",
@@ -39,6 +40,7 @@ const MapWrapper = () => {
 
     return (
         <LoadScript googleMapsApiKey={process.env.REACT_APP_GOOGLE_MAPS_API_KEY as string}>
+            <SearchBar />
             <GoogleMap
                 mapContainerStyle={containerStyle}
                 center={center}
