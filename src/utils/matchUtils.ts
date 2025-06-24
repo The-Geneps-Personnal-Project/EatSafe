@@ -29,6 +29,7 @@ export function mergeWithLocalIfPossible(
             ...bestMatch,
             google_rating: googlePlace.google_rating,
             photos: googlePlace.photos ?? [],
+            reviews: googlePlace.reviews ?? [],
             address: googlePlace.address ?? bestMatch.address
         };
     }
@@ -47,56 +48,7 @@ export function mergeWithLocalIfPossible(
         address: googlePlace.address ?? "",
         google_rating: googlePlace.google_rating,
         photos: googlePlace.photos ?? [],
+        reviews: googlePlace.reviews ?? [],
         local_rating: 1,
     };
 }
-
-export const getPlaceDetailsByTextSearch = (
-    query: string,
-    lat: number,
-    lng: number
-): Promise<google.maps.places.PlaceResult | null> => {
-    return new Promise((resolve) => {
-        const textService = new google.maps.places.PlacesService(document.createElement("div"));
-
-        textService.textSearch(
-            {
-                query,
-                location: new google.maps.LatLng(lat, lng),
-                radius: 300
-            },
-            (results, status) => {
-                if (
-                    status === google.maps.places.PlacesServiceStatus.OK &&
-                    results &&
-                    results.length > 0
-                ) {
-                    const placeId = results[0].place_id;
-                    if (!placeId) {
-                        resolve(null);
-                        return;
-                    }
-                    const detailService = new google.maps.places.PlacesService(document.createElement("div"));
-                    detailService.getDetails(
-                        {
-                            placeId,
-                            fields: ["name", "rating", "formatted_address", "geometry", "photos"]
-                        },
-                        (place, status) => {
-                            if (
-                                status === google.maps.places.PlacesServiceStatus.OK &&
-                                place
-                            ) {
-                                resolve(place);
-                            } else {
-                                resolve(null);
-                            }
-                        }
-                    );
-                } else {
-                    resolve(null);
-                }
-            }
-        );
-    });
-};

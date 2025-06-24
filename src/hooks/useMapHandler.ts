@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { getPlaceDetailsByTextSearch, mergeWithLocalIfPossible } from "@utils/matchUtils";
+import { mergeWithLocalIfPossible } from "@utils/matchUtils";
 import type { Restaurant } from "@schemas/restaurant";
 import { usePlaceDetails } from "@hooks/usePlaceDetails";
 import { useRestaurantsData } from "./useRestaurantsData";
@@ -7,21 +7,31 @@ import { useRestaurantsData } from "./useRestaurantsData";
 export const useMapHandlers = () => {
     const mapRef = useRef<google.maps.Map | null>(null);
     const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
-    const { getPlaceDetails, setMapElement } = usePlaceDetails();
+    const { getPlaceDetails, setMapElement, getPlaceDetailsByTextSearch } = usePlaceDetails();
     const { restaurants } = useRestaurantsData();
 
     const handleSelect = async (restaurant: Restaurant, zoom?: number) => {
-            let enriched = restaurant;
+        let enriched = restaurant;
 
-        if (!restaurant.google_rating && !restaurant.photos) {
+        const missingGoogleData =
+            restaurant.google_rating == null ||
+            !Array.isArray(restaurant.photos) ||
+            !Array.isArray(restaurant.reviews);
+
+        if (missingGoogleData) {
             try {
-                const place = await getPlaceDetailsByTextSearch(restaurant.name, restaurant.lat, restaurant.lng);
+                const place = await getPlaceDetailsByTextSearch(
+                    restaurant.name,
+                    restaurant.lat,
+                    restaurant.lng
+                );
                 if (place) {
                     enriched = {
                         ...restaurant,
                         google_rating: place.rating,
                         photos: place.photos,
-                        address: place.formatted_address || restaurant.address
+                        reviews: place.reviews,
+                        address: place.formatted_address || restaurant.address,
                     };
                 }
             } catch (e) {
@@ -30,10 +40,6 @@ export const useMapHandlers = () => {
         }
 
         setSelectedRestaurant(enriched);
-        if (mapRef.current && !(zoom! >= 16)) {
-            mapRef.current.panTo({ lat: restaurant.lat, lng: restaurant.lng });
-            mapRef.current.setZoom(16);
-        }
     };
 
     const handleFallbackSearch = async (placeId: string) => {
@@ -70,6 +76,7 @@ export const useMapHandlers = () => {
         setMapElement,
         selectedRestaurant,
         setSelectedRestaurant,
+        getPlaceDetailsByTextSearch,
         handleSelect,
         handleFallbackSearch
     };

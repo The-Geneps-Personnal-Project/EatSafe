@@ -48,6 +48,7 @@ const drawerContentSx = (expanded: boolean) => ({
 });
 
 const RestaurantCard = ({ restaurant, onClose, isMobile }: Props) => {
+    console.log("RestaurantCard rendered for:", restaurant);
     const theme = useTheme();
     const isDesktop = useMediaQuery(theme.breakpoints.up("md"));
     const [isExpanded, setIsExpanded] = useState(true);
@@ -92,7 +93,7 @@ const RestaurantCard = ({ restaurant, onClose, isMobile }: Props) => {
                 </Typography>
             )}
 
-            <ReviewsSection />
+            <ReviewsSection restaurant={restaurant} />
             {restaurant.photos && <PhotosSlider photos={restaurant.photos} />}
         </Box>
     );
@@ -126,13 +127,15 @@ const RestaurantCard = ({ restaurant, onClose, isMobile }: Props) => {
         <Box
             sx={{
                 position: "absolute",
-                bottom: 20,
-                left: 20,
+                top: 20,
+                right: 20,
                 width: 300,
+                maxHeight: "80vh",
                 bgcolor: "white",
                 boxShadow: 3,
                 borderRadius: 2,
-                zIndex: 9999
+                zIndex: 9999,
+                overflowY: "auto",
             }}
         >
             {content}

@@ -5,14 +5,13 @@ import {
     Marker,
     MarkerClusterer
 } from "@react-google-maps/api";
-import { useTheme, useMediaQuery } from "@mui/material";
+import { useTheme, useMediaQuery, Zoom } from "@mui/material";
 import { useRestaurantsData } from "@hooks/useRestaurantsData";
 import { getSymbolIcon } from "@utils/markerColors";
 import RestaurantCard from "@components/UI/Card/RestaurantCard";
 import SearchBar from "@components/UI/SearchBar/SearchBar";
 import OverlaySpinner from "@components/UI/Spinner/OverlaySpinner";
 import { useMapHandlers } from "@hooks/useMapHandler";
-import { getPlaceDetailsByTextSearch } from "@utils/matchUtils";
 import type { Restaurant } from "@schemas/restaurant";
 
 const containerStyle = {
@@ -47,7 +46,8 @@ const MapWrapper = () => {
         setMapElement,
         selectedRestaurant,
         setSelectedRestaurant,
-        handleFallbackSearch
+        handleFallbackSearch,
+        getPlaceDetailsByTextSearch
     } = useMapHandlers();
 
     const key = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
@@ -110,11 +110,14 @@ const MapWrapper = () => {
                     restaurant.lng
                 );
 
+                console.log("Google place found:", place);
+
                 if (place) {
                     enriched = {
                         ...restaurant,
                         google_rating: place.rating,
                         photos: place.photos,
+                        reviews: place.reviews,
                         address: place.formatted_address || restaurant.address
                     };
                 }
@@ -125,7 +128,7 @@ const MapWrapper = () => {
 
         setSelectedRestaurant(enriched);
 
-        if (mapRef.current) {
+        if (mapRef.current && (currentZoom < 16)) {
             mapRef.current.panTo({ lat: restaurant.lat, lng: restaurant.lng });
             mapRef.current.setZoom(16);
         }
@@ -146,7 +149,7 @@ const MapWrapper = () => {
                 onLoad={onMapLoad}
                 options={{
                     disableDefaultUI: true,
-                    zoomControl: true,
+                    zoomControl: false,
                     mapTypeControl: false,
                     streetViewControl: false,
                     fullscreenControl: false

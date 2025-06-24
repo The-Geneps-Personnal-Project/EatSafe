@@ -17,6 +17,7 @@ export function mergeWithLocal(place: Partial<Restaurant>): Restaurant {
         google_rating: place.google_rating ?? undefined,
         address: place.address,
         photos: place.photos,
+        reviews: place.reviews,
         source: localMatch ? "merged" : "google"
     };
 }

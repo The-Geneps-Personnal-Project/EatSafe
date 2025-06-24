@@ -14,7 +14,16 @@ export const usePlaceDetails = () => {
             serviceRef.current.getDetails(
                 {
                     placeId,
-                    fields: ["name", "geometry", "rating", "formatted_address", "photos", "types", "place_id", "reviews"]
+                    fields: [
+                        "name",
+                        "geometry",
+                        "rating",
+                        "formatted_address",
+                        "photos",
+                        "types",
+                        "place_id",
+                        "reviews"
+                    ]
                 },
                 (place, status) => {
                     if (status !== google.maps.places.PlacesServiceStatus.OK || !place) {
@@ -26,5 +35,42 @@ export const usePlaceDetails = () => {
         });
     };
 
-    return { setMapElement, getPlaceDetails };
+    const getPlaceDetailsByTextSearch = (
+        query: string,
+        lat: number,
+        lng: number
+    ): Promise<google.maps.places.PlaceResult | null> => {
+        return new Promise((resolve) => {
+            const textService = new google.maps.places.PlacesService(document.createElement("div"));
+
+            textService.textSearch(
+                {
+                    query,
+                    location: new google.maps.LatLng(lat, lng),
+                    radius: 300
+                },
+                (results, status) => {
+                    if (
+                        status === google.maps.places.PlacesServiceStatus.OK &&
+                        results &&
+                        results.length > 0
+                    ) {
+                        const placeId = results[0].place_id;
+                        if (!placeId) return resolve(null);
+
+                        // Use the main method to get full details
+                        getPlaceDetails(placeId).then(resolve).catch(() => resolve(null));
+                    } else {
+                        resolve(null);
+                    }
+                }
+            );
+        });
+    };
+
+    return {
+        setMapElement,
+        getPlaceDetails,
+        getPlaceDetailsByTextSearch
+    };
 };
