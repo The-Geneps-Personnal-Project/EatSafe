@@ -10,7 +10,7 @@ const PhotosSlider = ({ photos }: Props) => {
     return (
         <>
             <Typography variant="subtitle2" fontWeight={600} mt={3}>
-                Photos Google
+                Photos
             </Typography>
             <Box
                 sx={{

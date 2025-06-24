@@ -8,7 +8,7 @@ type Props = {
 const GoogleRating = ({ rating }: Props) => (
     <Box display="flex" alignItems="center" gap={1} mt={3}>
         <Typography variant="subtitle2" fontWeight={600}>
-            Google Rating
+            Score Google
         </Typography>
         <Stack direction="row" spacing={0.5}>
             {Array.from({ length: 5 }).map((_, i) => (
