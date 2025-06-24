@@ -110,8 +110,6 @@ const MapWrapper = () => {
                     restaurant.lng
                 );
 
-                console.log("Google place found:", place);
-
                 if (place) {
                     enriched = {
                         ...restaurant,

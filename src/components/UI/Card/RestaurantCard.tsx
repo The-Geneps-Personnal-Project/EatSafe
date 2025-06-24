@@ -48,7 +48,6 @@ const drawerContentSx = (expanded: boolean) => ({
 });
 
 const RestaurantCard = ({ restaurant, onClose, isMobile }: Props) => {
-    console.log("RestaurantCard rendered for:", restaurant);
     const theme = useTheme();
     const isDesktop = useMediaQuery(theme.breakpoints.up("md"));
     const [isExpanded, setIsExpanded] = useState(true);
