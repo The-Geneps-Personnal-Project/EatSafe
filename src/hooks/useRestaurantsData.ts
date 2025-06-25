@@ -48,6 +48,7 @@ export const useRestaurantsData = () => {
                             lat,
                             lng,
                             address: row.Adresse_2_UA || "",
+                            city: row.Libelle_commune || "Inconnu",
                             local_rating: [1, 2, 3, 4].includes(code) ? (code as 1 | 2 | 3 | 4) : 1,
                             local_rating_description: row.Synthese_eval_sanit || "",
                             inspection_date: row.Date_inspection || "",

@@ -22,7 +22,10 @@ export const usePlaceDetails = () => {
                         "photos",
                         "types",
                         "place_id",
-                        "reviews"
+                        "reviews",
+                        "user_ratings_total",
+                        "opening_hours",
+                        "price_level",
                     ]
                 },
                 (place, status) => {
@@ -38,7 +41,8 @@ export const usePlaceDetails = () => {
     const getPlaceDetailsByTextSearch = (
         query: string,
         lat: number,
-        lng: number
+        lng: number,
+        city: string
     ): Promise<google.maps.places.PlaceResult | null> => {
         return new Promise((resolve) => {
             const textService = new google.maps.places.PlacesService(document.createElement("div"));
@@ -55,10 +59,9 @@ export const usePlaceDetails = () => {
                         results &&
                         results.length > 0
                     ) {
-                        const placeId = results[0].place_id;
+                        const placeId = results.filter(r => r.formatted_address?.includes(city))[0].place_id;
                         if (!placeId) return resolve(null);
 
-                        // Use the main method to get full details
                         getPlaceDetails(placeId).then(resolve).catch(() => resolve(null));
                     } else {
                         resolve(null);

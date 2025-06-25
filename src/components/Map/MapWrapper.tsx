@@ -1,11 +1,9 @@
 import { useEffect, useState } from "react";
 import {
     GoogleMap,
-    LoadScript,
-    Marker,
-    MarkerClusterer
+    LoadScript
 } from "@react-google-maps/api";
-import { useTheme, useMediaQuery, Zoom } from "@mui/material";
+import { useTheme, useMediaQuery, Box } from "@mui/material";
 import { useRestaurantsData } from "@hooks/useRestaurantsData";
 import { getSymbolIcon } from "@utils/markerColors";
 import RestaurantCard from "@components/UI/Card/RestaurantCard";
@@ -34,8 +32,8 @@ const MapWrapper = () => {
     const [mapReady, setMapReady] = useState(false);
     const [dataLoaded, setDataLoaded] = useState(false);
     const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
-    const [visibleRestaurants, setVisibleRestaurants] = useState<Restaurant[]>([]);
     const [currentZoom, setCurrentZoom] = useState<number>(6);
+    const [visibleRestaurants, setVisibleRestaurants] = useState<Restaurant[]>([]);
 
     const { restaurants, loading } = useRestaurantsData();
     const theme = useTheme();
@@ -81,6 +79,64 @@ const MapWrapper = () => {
         setVisibleRestaurants(filtered);
     };
 
+    const handleSelect = async (restaurant: Restaurant) => {
+        let enriched = restaurant;
+
+        if (!restaurant.google_rating && !restaurant.photos) {
+            try {
+                const place = await getPlaceDetailsByTextSearch(
+                    restaurant.name,
+                    restaurant.lat,
+                    restaurant.lng,
+                    restaurant.city
+                );
+
+                if (place) {
+                    enriched = {
+                        ...restaurant,
+                        google_rating: place.rating,
+                        user_ratings_total: place.user_ratings_total,
+                        opening_hours: place.opening_hours
+                            ? {
+                                    open_now: place.opening_hours.isOpen() ?? false,
+                                    weekdayDescriptions: place.opening_hours.weekday_text || [],
+                                    periods: place.opening_hours.periods ?? []
+                                }
+                            : undefined,
+                        price_level: place.price_level,
+                        photos: place.photos,
+                        reviews: place.reviews,
+                        address: place.formatted_address || restaurant.address
+                    };
+                }
+            } catch (e) {
+                console.warn("Failed Google enrichment for pin:", restaurant.name);
+            }
+        }
+
+        setSelectedRestaurant(enriched);
+
+        if (mapRef.current && currentZoom < 15) {
+            mapRef.current.panTo({ lat: restaurant.lat, lng: restaurant.lng });
+            mapRef.current.setZoom(15);
+        }
+    };
+
+    const createNativeMarkers = (map: google.maps.Map) => {
+        visibleRestaurants.forEach((restaurant) => {
+            const marker = new window.google.maps.Marker({
+                position: { lat: restaurant.lat, lng: restaurant.lng },
+                map,
+                icon: getSymbolIcon(restaurant.local_rating),
+                title: restaurant.name
+            });
+
+            marker.addListener("click", () => {
+                handleSelect(restaurant);
+            });
+        });
+    };
+
     const onMapLoad = (map: google.maps.Map) => {
         mapRef.current = map;
         setMapElement(map);
@@ -97,39 +153,12 @@ const MapWrapper = () => {
                 setVisibleRestaurants([]);
             }
         });
-    };
 
-    const handleSelect = async (restaurant: Restaurant) => {
-        let enriched = restaurant;
-
-        if (!restaurant.google_rating && !restaurant.photos) {
-            try {
-                const place = await getPlaceDetailsByTextSearch(
-                    restaurant.name,
-                    restaurant.lat,
-                    restaurant.lng
-                );
-
-                if (place) {
-                    enriched = {
-                        ...restaurant,
-                        google_rating: place.rating,
-                        photos: place.photos,
-                        reviews: place.reviews,
-                        address: place.formatted_address || restaurant.address
-                    };
-                }
-            } catch (e) {
-                console.warn("Failed Google enrichment for pin:", restaurant.name);
+        map.addListener("bounds_changed", () => {
+            if (currentZoom >= MIN_ZOOM) {
+                updateVisibleRestaurants();
             }
-        }
-
-        setSelectedRestaurant(enriched);
-
-        if (mapRef.current && (currentZoom < 16)) {
-            mapRef.current.panTo({ lat: restaurant.lat, lng: restaurant.lng });
-            mapRef.current.setZoom(16);
-        }
+        });
     };
 
     useEffect(() => {
@@ -137,6 +166,12 @@ const MapWrapper = () => {
             updateVisibleRestaurants();
         }
     }, [mapReady, restaurants, currentZoom]);
+
+    useEffect(() => {
+        if (mapRef.current && dataLoaded && currentZoom >= MIN_ZOOM) {
+            createNativeMarkers(mapRef.current);
+        }
+    }, [visibleRestaurants]);
 
     return (
         <LoadScript googleMapsApiKey={key as string} libraries={googleLibraries}>
@@ -154,36 +189,15 @@ const MapWrapper = () => {
                 }}
             >
                 <SearchBar onSelect={handleSelect} onFallbackSearch={handleFallbackSearch} />
-
-                {dataLoaded && (
-                    <>
-                        <MarkerClusterer>
-                            {(clusterer) => (
-                                <>
-                                    {visibleRestaurants.map((restaurant) => (
-                                        <Marker
-                                            key={restaurant.id}
-                                            position={{ lat: restaurant.lat, lng: restaurant.lng }}
-                                            icon={getSymbolIcon(restaurant.local_rating)}
-                                            clusterer={clusterer}
-                                            title={restaurant.name}
-                                            onClick={() => handleSelect(restaurant)}
-                                        />
-                                    ))}
-                                </>
-                            )}
-                        </MarkerClusterer>
-
-                        {selectedRestaurant && (
-                            <RestaurantCard
-                                restaurant={selectedRestaurant}
-                                onClose={() => setSelectedRestaurant(null)}
-                                isMobile={isMobile}
-                            />
-                        )}
-                    </>
-                )}
             </GoogleMap>
+
+            {selectedRestaurant && (
+                <RestaurantCard
+                    restaurant={selectedRestaurant}
+                    onClose={() => setSelectedRestaurant(null)}
+                    isMobile={isMobile}
+                />
+            )}
 
             {loading && <OverlaySpinner />}
         </LoadScript>
