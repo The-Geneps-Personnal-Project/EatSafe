@@ -14,6 +14,8 @@ import RatingChip from "./RatingChip";
 import GoogleRating from "./GoogleRating";
 import PhotosSlider from "./PhotosSlider";
 import ReviewsSection from "./ReviewsSection";
+import OpeningHours from "./OpeningHours";
+import PriceLevel from "./PriceLevel";
 
 type Props = {
     restaurant: Restaurant;
@@ -68,28 +70,47 @@ const RestaurantCard = ({ restaurant, onClose, isMobile }: Props) => {
                     </IconButton>
                 )}
             </Box>
+            
+            {restaurant.address && (
+                <Typography variant="subtitle2" color="text.primary" mt={2}>
+                    📍 {restaurant.address}
+                </Typography>
+            )}
 
             {(restaurant.fromLocalDataset && restaurant.local_rating) ? (
                 <>
                     <RatingChip score={restaurant.local_rating} />
-                    <Typography variant="body2" mt={1}>
+                    <Typography variant="subtitle2" mt={1}>
                         🧪 Inspection : {restaurant.inspection_date ? formatDate(restaurant.inspection_date) : "N/A"}
                     </Typography>
                 </>
             ) : (
-                <Typography variant="body2" color="text.primary" mt={1}>
+                <Typography variant="subtitle2" mt={2}>
                     Aucune donnée sanitaire trouvée
                 </Typography>
             )}
 
             {restaurant.google_rating && (
-                <GoogleRating rating={restaurant.google_rating} />
+                <GoogleRating rating={restaurant.google_rating} user_ratings_total={restaurant.user_ratings_total ?? -1} />
             )}
 
-            {restaurant.address && (
-                <Typography variant="body2" color="text.secondary" mt={2}>
-                    📍 {restaurant.address}
-                </Typography>
+
+            {restaurant.opening_hours && (
+                <Box>
+                    <Typography variant="subtitle2" fontWeight={600} mt={2}>
+                        Horaires d'ouverture
+                    </Typography>
+                    <OpeningHours
+                        openNow={restaurant.opening_hours.open_now}
+                        periods={restaurant.opening_hours.periods}
+                    />
+                </Box>
+            )}
+
+            {restaurant.price_level !== undefined && (
+                <Box mt={2}>
+                    <PriceLevel level={restaurant.price_level} />
+                </Box>
             )}
 
             <ReviewsSection restaurant={restaurant} />
@@ -128,7 +149,7 @@ const RestaurantCard = ({ restaurant, onClose, isMobile }: Props) => {
                 position: "absolute",
                 top: 20,
                 right: 20,
-                width: 300,
+                width: 400,
                 maxHeight: "80vh",
                 bgcolor: "white",
                 boxShadow: 3,
