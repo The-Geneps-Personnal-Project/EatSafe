@@ -26,7 +26,9 @@ export const usePlaceDetails = () => {
                         "user_ratings_total",
                         "opening_hours",
                         "price_level",
-                    ]
+                    ],
+                    language: "fr",
+                    region: "fr"
                 },
                 (place, status) => {
                     if (status !== google.maps.places.PlacesServiceStatus.OK || !place) {
