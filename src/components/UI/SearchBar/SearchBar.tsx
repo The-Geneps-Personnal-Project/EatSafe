@@ -1,9 +1,9 @@
 import { useMemo, useState, useEffect } from "react";
 import { Autocomplete, Box, TextField } from "@mui/material";
-import { mockRestaurants } from "@utils/mockRestaurants";
 import type { Restaurant } from "@schemas/restaurant";
 import { useAutocompleteService } from "@hooks/useAutoCompleteService";
 import debounce from "lodash.debounce";
+import { useRestaurantsData } from "@/hooks/useRestaurantsData";
 
 type Option =
     | { type: "local"; label: string; restaurant: Restaurant }
@@ -18,9 +18,10 @@ const SearchBar = ({ onSelect, onFallbackSearch }: Props) => {
     const [inputValue, setInputValue] = useState("");
     const [options, setOptions] = useState<Option[]>([]);
     const { getPredictions } = useAutocompleteService();
+    const { restaurants } = useRestaurantsData();
 
     const handleSearch = async (value: string) => {
-        const localResults: Option[] = mockRestaurants
+        const localResults: Option[] = restaurants
             .filter((r) => r.name.toLowerCase().includes(value.toLowerCase()))
             .map((r) => ({
                 type: "local",

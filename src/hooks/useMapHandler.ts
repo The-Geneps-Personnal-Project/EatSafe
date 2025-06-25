@@ -23,12 +23,22 @@ export const useMapHandlers = () => {
                 const place = await getPlaceDetailsByTextSearch(
                     restaurant.name,
                     restaurant.lat,
-                    restaurant.lng
+                    restaurant.lng,
+                    restaurant.city
                 );
                 if (place) {
                     enriched = {
                         ...restaurant,
                         google_rating: place.rating,
+                        user_ratings_total: place.user_ratings_total,
+                        opening_hours: place.opening_hours
+                            ? {
+                                open_now: place.opening_hours.isOpen() ?? false,
+                                weekdayDescriptions: place.opening_hours.weekday_text || [],
+                                periods: place.opening_hours.periods ?? [],
+                            }
+                            : undefined,
+                        price_level: place.price_level,
                         photos: place.photos,
                         reviews: place.reviews,
                         address: place.formatted_address || restaurant.address,
@@ -54,6 +64,15 @@ export const useMapHandlers = () => {
                     lng,
                     name: place.name || "Inconnu",
                     google_rating: place.rating,
+                    user_ratings_total: place.user_ratings_total,
+                        opening_hours: place.opening_hours
+                            ? {
+                                open_now: place.opening_hours.isOpen() ?? false,
+                                weekdayDescriptions: place.opening_hours.weekday_text || [],
+                                periods: place.opening_hours.periods ?? [],
+                            }
+                            : undefined,
+                        price_level: place.price_level,
                     reviews: place.reviews,
                     address: place.formatted_address,
                     photos: place.photos
