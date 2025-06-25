@@ -57,9 +57,13 @@ export function mergeWithLocalIfPossible(
         lat: targetLat,
         lng: targetLng,
         address: googlePlace.address ?? "",
+        city: targetCity || "Inconnu",
         local_rating: 1,
         google_rating: googlePlace.google_rating,
+        user_ratings_total: googlePlace.user_ratings_total,
         photos: googlePlace.photos ?? [],
-        reviews: googlePlace.reviews ?? []
+        reviews: googlePlace.reviews ?? [],
+        opening_hours: googlePlace.opening_hours,
+        price_level: googlePlace.price_level,
     };
 }
