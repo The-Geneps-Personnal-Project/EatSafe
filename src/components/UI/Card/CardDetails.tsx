@@ -4,7 +4,6 @@ import type { Restaurant } from "@schemas/restaurant";
 import { formatDate } from "@utils/format";
 import RatingChip from "./CardComponents/RatingChip";
 import OpeningHours from "./CardComponents/OpeningHours";
-import PriceLevel from "./CardComponents/PriceLevel";
 import ReviewsSection from "./CardComponents/ReviewsSection";
 import PhotosSlider from "./CardComponents/PhotosSlider";
 
@@ -44,12 +43,6 @@ const RestaurantCardDetails: React.FC<Props> = ({ restaurant }) => {
                     periods={restaurant.opening_hours.periods}
                 />
                 </Box>
-            )}
-
-            {restaurant.price_level !== undefined && (
-                    <Box mt={2}>
-                        <PriceLevel level={restaurant.price_level} />
-                    </Box>
             )}
 
             <ReviewsSection restaurant={restaurant} />

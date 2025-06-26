@@ -25,9 +25,6 @@ const boxSx = {
 }
 
 const RestaurantCard = ({ restaurant, onClose, isMobile }: Props) => {
-    const theme = useTheme();
-    const isDesktop = useMediaQuery(theme.breakpoints.up("md"));
-
     if (isMobile) {
         return <RestaurantCardMobileDrawer restaurant={restaurant} onClose={onClose} />;
     }
