@@ -42,13 +42,15 @@ export const useRestaurantsData = () => {
                         const [lat, lng] = coords;
                         const code = parseInt(row.APP_Code_synthese_eval_sanit);
 
+                        const city = row.Libelle_commune.includes("Paris") ? "Paris" : row.Libelle_commune
+
                         return {
                             id: row.SIRET ? `${row.SIRET}-${index}` : `row-${index}`,
                             name: row.APP_Libelle_etablissement,
                             lat,
                             lng,
                             address: row.Adresse_2_UA || "",
-                            city: row.Libelle_commune || "Inconnu",
+                            city: city || "Inconnu",
                             local_rating: [1, 2, 3, 4].includes(code) ? (code as 1 | 2 | 3 | 4) : 1,
                             local_rating_description: row.Synthese_eval_sanit || "",
                             inspection_date: row.Date_inspection || "",

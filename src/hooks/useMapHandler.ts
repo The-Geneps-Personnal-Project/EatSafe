@@ -10,7 +10,7 @@ export const useMapHandlers = () => {
     const { getPlaceDetails, setMapElement, getPlaceDetailsByTextSearch } = usePlaceDetails();
     const { restaurants } = useRestaurantsData();
 
-    const handleSelect = async (restaurant: Restaurant, zoom?: number) => {
+    const handleSelect = async (restaurant: Restaurant) => {
         let enriched = restaurant;
 
         const missingGoogleData =
