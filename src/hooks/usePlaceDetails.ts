@@ -62,7 +62,6 @@ export const usePlaceDetails = () => {
                         results &&
                         results.length > 0
                     ) {
-                        console.log("Google text search results:", results, city);
                         const restaurant = results.find(
                             (r) =>
                                 r.types?.includes("restaurant") &&

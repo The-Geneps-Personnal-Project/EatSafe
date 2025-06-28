@@ -49,3 +49,11 @@ export const getWeekSchedule = (
         return `${dayName} : ${ranges.length ? ranges.join(", ") : "Fermé"}`;
     });
 };
+
+export function extractCity(city: string): string {
+    const parts = city.split(",");
+    if (parts.length > 1) {
+        return parts[1].trim().split(" ")[0];
+    }
+    return city.trim().split(" ")[0];
+}
