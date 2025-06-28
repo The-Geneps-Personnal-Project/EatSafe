@@ -12,7 +12,11 @@ const PhotosSlider = ({ photos }: Props) => {
     if (!visiblePhotos.length) return null;
 
     const getPhotoUrl = (photo_reference: string, maxWidth = 400) => {
-        return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=${maxWidth}&photoreference=${encodeURIComponent(photo_reference)}&key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}`;
+        const apiKey = process.env.REACT_APP_GOOGLE_MAPS_API_KEY;
+        if (!apiKey) {
+            throw new Error("REACT_APP_GOOGLE_MAPS_API_KEY is not defined. Please set the environment variable to use Google Maps API.");
+        }
+        return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=${maxWidth}&photoreference=${encodeURIComponent(photo_reference)}&key=${apiKey}`;
     };
 
     const handleImageError = (photo_reference: string) => {
