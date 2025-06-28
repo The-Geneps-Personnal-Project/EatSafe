@@ -1,11 +1,25 @@
+import { useState } from "react";
 import { Box, Typography } from "@mui/material";
+import type { Photo } from "@schemas/restaurant";
 
 type Props = {
-    photos: google.maps.places.PlacePhoto[];
+    photos: Photo[];
 };
 
 const PhotosSlider = ({ photos }: Props) => {
-    if (!photos.length) return null;
+    const [visiblePhotos, setVisiblePhotos] = useState(photos);
+
+    if (!visiblePhotos.length) return null;
+
+    const getPhotoUrl = (photo_reference: string, maxWidth = 400) => {
+        return `https://maps.googleapis.com/maps/api/place/photo?maxwidth=${maxWidth}&photoreference=${encodeURIComponent(photo_reference)}&key=${process.env.REACT_APP_GOOGLE_MAPS_API_KEY}`;
+    };
+
+    const handleImageError = (photo_reference: string) => {
+        setVisiblePhotos((prev) =>
+            prev.filter((p) => p.photo_reference !== photo_reference)
+        );
+    };
 
     return (
         <>
@@ -21,11 +35,11 @@ const PhotosSlider = ({ photos }: Props) => {
                     px: 1
                 }}
             >
-                {photos.slice(0, 5).map((photo, idx) => {
-                    const url = photo.getUrl({ maxWidth: 300, maxHeight: 200 });
+                {visiblePhotos.slice(0, 5).map((photo, idx) => {
+                    const url = getPhotoUrl(photo.photo_reference);
                     return (
                         <Box
-                            key={idx}
+                            key={photo.photo_reference}
                             component="img"
                             src={url}
                             alt={`Google photo ${idx + 1}`}
@@ -36,6 +50,7 @@ const PhotosSlider = ({ photos }: Props) => {
                                 boxShadow: 1,
                                 flexShrink: 0
                             }}
+                            onError={() => handleImageError(photo.photo_reference)}
                         />
                     );
                 })}

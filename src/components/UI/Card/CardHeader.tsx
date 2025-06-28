@@ -4,6 +4,8 @@ import CloseIcon from "@mui/icons-material/Close";
 import PriceLevel from "./CardComponents/PriceLevel";
 import GoogleRating from "./CardComponents/GoogleRating";
 import type { Restaurant } from "@schemas/restaurant";
+import RatingChip from "./CardComponents/RatingChip";
+import { formatDate } from "@/utils/format";
 
 type Props = {
     restaurant: Restaurant;
@@ -40,6 +42,27 @@ const RestaurantCardHeader: React.FC<Props> = ({ restaurant, onClose }) => {
             user_ratings_total={restaurant.user_ratings_total ?? -1}
             />
         )}
+
+        {restaurant.sanitary_score ? (
+            <>
+                <RatingChip score={restaurant.sanitary_score} />
+                <Typography variant="subtitle2" mt={1}>
+                    🧪 Inspection : {restaurant.inspection_date ? formatDate(restaurant.inspection_date) : "N/A"}
+                </Typography>
+            </>
+        ) : (
+                <Typography variant="subtitle2" mt={2}>
+                Aucune donnée sanitaire trouvée
+                </Typography>
+            )}
+        <Box mt={1}>
+            <Box
+                sx={{
+                    borderTop: "3px solid #e0e0e0",
+                    width: "100%",
+                }}
+            />
+        </Box>
         </Box>
     );
 };
