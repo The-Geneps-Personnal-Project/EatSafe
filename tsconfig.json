@@ -25,6 +25,7 @@
             "@assets/*": ["assets/*"],
             "@schemas/*": ["types/*"],
             "@context/*": ["context/*"],
+            "@services/*": ["services/*"],
         }
     },
     "include": ["src/**/*"]
