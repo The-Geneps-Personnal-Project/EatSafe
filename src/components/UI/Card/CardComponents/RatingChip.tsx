@@ -12,8 +12,8 @@ export const getRatingColor = (rating: 1 | 2 | 3 | 4): string => {
 const ratingLabels: Record<1 | 2 | 3 | 4, string> = {
     1: "Très satisfaisant",
     2: "Satisfaisant",
-    3: "À mettre à jour",
-    4: "À mettre à jour urgemment"
+    3: "A améliorer",
+    4: "A corriger de manière urgente"
 };
 
 type Props = {

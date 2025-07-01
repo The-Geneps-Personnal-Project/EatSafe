@@ -26,7 +26,9 @@ export const usePlaceDetails = () => {
                         "user_ratings_total",
                         "opening_hours",
                         "price_level",
-                    ]
+                    ],
+                    language: "fr",
+                    region: "fr"
                 },
                 (place, status) => {
                     if (status !== google.maps.places.PlacesServiceStatus.OK || !place) {
@@ -51,7 +53,8 @@ export const usePlaceDetails = () => {
                 {
                     query,
                     location: new google.maps.LatLng(lat, lng),
-                    radius: 300
+                    radius: 300,
+                    type: "restaurant",
                 },
                 (results, status) => {
                     if (
@@ -59,10 +62,14 @@ export const usePlaceDetails = () => {
                         results &&
                         results.length > 0
                     ) {
-                        const placeId = results.filter(r => r.formatted_address?.includes(city))[0].place_id;
-                        if (!placeId) return resolve(null);
+                        const restaurant = results.find(
+                            (r) =>
+                                r.types?.includes("restaurant") &&
+                                r.formatted_address?.toLowerCase().includes(city.toLowerCase())
+                            );
+                            if (!restaurant?.place_id) return resolve(null);
 
-                        getPlaceDetails(placeId).then(resolve).catch(() => resolve(null));
+                            getPlaceDetails(restaurant.place_id).then(resolve).catch(() => resolve(null));
                     } else {
                         resolve(null);
                     }

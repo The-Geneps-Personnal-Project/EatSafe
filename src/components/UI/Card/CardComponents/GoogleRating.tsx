@@ -23,7 +23,7 @@ const GoogleRating = ({ rating, user_ratings_total }: Props) => (
             ))}
         </Stack>
         <Typography variant="body2" ml={0.5}>
-            {rating.toFixed(1)} {user_ratings_total != -1 ? `sur (${user_ratings_total} avis)` : ""}
+            {rating.toFixed(1)} {user_ratings_total !== -1 ? `sur (${user_ratings_total} avis)` : ""}
         </Typography>
     </Box>
 );
