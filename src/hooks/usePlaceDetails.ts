@@ -22,8 +22,13 @@ export const usePlaceDetails = () => {
                         "photos",
                         "types",
                         "place_id",
-                        "reviews"
-                    ]
+                        "reviews",
+                        "user_ratings_total",
+                        "opening_hours",
+                        "price_level",
+                    ],
+                    language: "fr",
+                    region: "fr"
                 },
                 (place, status) => {
                     if (status !== google.maps.places.PlacesServiceStatus.OK || !place) {
@@ -38,7 +43,8 @@ export const usePlaceDetails = () => {
     const getPlaceDetailsByTextSearch = (
         query: string,
         lat: number,
-        lng: number
+        lng: number,
+        city: string
     ): Promise<google.maps.places.PlaceResult | null> => {
         return new Promise((resolve) => {
             const textService = new google.maps.places.PlacesService(document.createElement("div"));
@@ -47,7 +53,8 @@ export const usePlaceDetails = () => {
                 {
                     query,
                     location: new google.maps.LatLng(lat, lng),
-                    radius: 300
+                    radius: 300,
+                    type: "restaurant",
                 },
                 (results, status) => {
                     if (
@@ -55,11 +62,14 @@ export const usePlaceDetails = () => {
                         results &&
                         results.length > 0
                     ) {
-                        const placeId = results[0].place_id;
-                        if (!placeId) return resolve(null);
+                        const restaurant = results.find(
+                            (r) =>
+                                r.types?.includes("restaurant") &&
+                                r.formatted_address?.toLowerCase().includes(city.toLowerCase())
+                            );
+                            if (!restaurant?.place_id) return resolve(null);
 
-                        // Use the main method to get full details
-                        getPlaceDetails(placeId).then(resolve).catch(() => resolve(null));
+                            getPlaceDetails(restaurant.place_id).then(resolve).catch(() => resolve(null));
                     } else {
                         resolve(null);
                     }

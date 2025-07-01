@@ -1,74 +1,33 @@
 import { useRef, useState } from "react";
-import { mergeWithLocalIfPossible } from "@utils/matchUtils";
 import type { Restaurant } from "@schemas/restaurant";
-import { usePlaceDetails } from "@hooks/usePlaceDetails";
-import { useRestaurantsData } from "./useRestaurantsData";
+import { fetchRestaurantDetail, fetchRestaurantDetailByName } from "@services/restaurantService";
 
 export const useMapHandlers = () => {
     const mapRef = useRef<google.maps.Map | null>(null);
     const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
-    const { getPlaceDetails, setMapElement, getPlaceDetailsByTextSearch } = usePlaceDetails();
-    const { restaurants } = useRestaurantsData();
 
-    const handleSelect = async (restaurant: Restaurant, zoom?: number) => {
-        let enriched = restaurant;
-
-        const missingGoogleData =
-            restaurant.google_rating == null ||
-            !Array.isArray(restaurant.photos) ||
-            !Array.isArray(restaurant.reviews);
-
-        if (missingGoogleData) {
-            try {
-                const place = await getPlaceDetailsByTextSearch(
-                    restaurant.name,
-                    restaurant.lat,
-                    restaurant.lng
-                );
-                if (place) {
-                    enriched = {
-                        ...restaurant,
-                        google_rating: place.rating,
-                        photos: place.photos,
-                        reviews: place.reviews,
-                        address: place.formatted_address || restaurant.address,
-                    };
-                }
-            } catch (e) {
-                console.warn("No matching Google place found for:", restaurant.name);
-            }
+    const handleSelect = async (restaurant: Restaurant) => {
+        try {
+            const data = await fetchRestaurantDetail(restaurant.siret);
+            setSelectedRestaurant(data);
+        } catch (e) {
+            console.error("Failed to fetch restaurant detail", e);
+            setSelectedRestaurant(restaurant);
         }
-
-        setSelectedRestaurant(enriched);
     };
 
-    const handleFallbackSearch = async (placeId: string) => {
+    const handleSearch = async (name: string, city: string) => {
         try {
-            const place = await getPlaceDetails(placeId);
-            if (place && place.geometry?.location) {
-                const lat = place.geometry.location.lat();
-                const lng = place.geometry.location.lng();
-
-                const merged = mergeWithLocalIfPossible(restaurants, {
-                    lat,
-                    lng,
-                    name: place.name || "Inconnu",
-                    google_rating: place.rating,
-                    reviews: place.reviews,
-                    address: place.formatted_address,
-                    photos: place.photos
-                });
-
-                setSelectedRestaurant(merged);
-
-                if (mapRef.current) {
-                    mapRef.current.panTo({ lat, lng });
-                    mapRef.current.setZoom(16);
-                }
-            }
+            const data = await fetchRestaurantDetailByName(name, city);
+            setSelectedRestaurant(data);
         } catch (e) {
-            console.error("Fallback search error", e);
+            console.error("Failed to fetch restaurant detail by name/city", e);
+            setSelectedRestaurant(null);
         }
+    };
+
+    const setMapElement = (map: google.maps.Map) => {
+        mapRef.current = map;
     };
 
     return {
@@ -76,8 +35,7 @@ export const useMapHandlers = () => {
         setMapElement,
         selectedRestaurant,
         setSelectedRestaurant,
-        getPlaceDetailsByTextSearch,
         handleSelect,
-        handleFallbackSearch
+        handleSearch,
     };
 };
