@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { GoogleMap, LoadScript } from "@react-google-maps/api";
 import { useTheme, useMediaQuery, Box, Button } from "@mui/material";
 import { getSymbolIcon } from "@utils/markerColors";
@@ -40,9 +40,8 @@ export default function MapWrapper() {
 
     useEffect(() => {
         navigator.geolocation.getCurrentPosition(
-        ({ coords }) =>
-            setMapCenter({ lat: coords.latitude, lng: coords.longitude }),
-        () => setMapCenter(DEFAULT_CENTER)
+            ({ coords }) => setMapCenter({ lat: coords.latitude, lng: coords.longitude }),
+            () => setMapCenter(DEFAULT_CENTER)
         );
     }, []);
 
@@ -51,15 +50,17 @@ export default function MapWrapper() {
         if (cached) return setSelectedRestaurant(cached);
 
         try {
-        const data = await fetchRestaurantDetail(r.siret);
-        detailCacheRef.current.set(r.siret, data);
-        setSelectedRestaurant(data);
-        if (mapRef.current && currentZoom < 15) {
-            mapRef.current.panTo({ lat: data.lat, lng: data.lng });
-            mapRef.current.setZoom(15);
-        }
+            const data = await fetchRestaurantDetail(r.siret);
+            detailCacheRef.current.set(r.siret, data);
+            // force card to remount to pick up new photos
+            setSelectedRestaurant(null);
+            setSelectedRestaurant(data);
+            if (mapRef.current && currentZoom < 15) {
+                mapRef.current.panTo({ lat: data.lat, lng: data.lng });
+                mapRef.current.setZoom(15);
+            }
         } catch (e) {
-        console.error(e);
+            console.error(e);
         }
     };
 
@@ -76,34 +77,34 @@ export default function MapWrapper() {
 
     const handleSearch = async (name: string, city: string) => {
         try {
-        const r = await fetchRestaurantDetailByName(name, city);
-        setSelectedRestaurant(r);
-        if (mapRef.current) {
-            clearMarkers();
-            createNativeMarkers(mapRef.current, [r]);
-            mapRef.current.panTo({ lat: r.lat, lng: r.lng });
-            mapRef.current.setZoom(16);
-        }
+            const r = await fetchRestaurantDetailByName(name, city);
+            setSelectedRestaurant(r);
+            if (mapRef.current) {
+                clearMarkers();
+                createNativeMarkers(mapRef.current, [r]);
+                mapRef.current.panTo({ lat: r.lat, lng: r.lng });
+                mapRef.current.setZoom(16);
+            }
         } catch {
-        console.error("No match for", name, city);
+            console.error("No match for", name, city);
         }
     };
 
     const handleFilterSearch = async (filters: FilterValues) => {
         setSearching(true);
         try {
-        const data = await fetchFilteredRestaurants(filters);
-        setFiltersOpen(false);
-        if (mapRef.current && data.length) {
-            const bounds = new google.maps.LatLngBounds();
-            data.forEach((r) => bounds.extend({ lat: r.lat, lng: r.lng }));
-            mapRef.current.fitBounds(bounds);
-            createNativeMarkers(mapRef.current, data);
-        }
+            const data = await fetchFilteredRestaurants(filters);
+            setFiltersOpen(false);
+            if (mapRef.current && data.length) {
+                const bounds = new google.maps.LatLngBounds();
+                data.forEach((r) => bounds.extend({ lat: r.lat, lng: r.lng }));
+                mapRef.current.fitBounds(bounds);
+                createNativeMarkers(mapRef.current, data);
+            }
         } catch (e) {
-        console.error(e);
+            console.error(e);
         } finally {
-        setSearching(false);
+            setSearching(false);
         }
     };
 
@@ -113,18 +114,18 @@ export default function MapWrapper() {
     ) => {
         clearMarkers();
         const markers = restaurants.map((r) => {
-        const sel = selectedRestaurant?.siret === r.siret;
-        const m = new google.maps.Marker({
-            position: { lat: r.lat, lng: r.lng },
-            icon: {
-            url: getSymbolIcon(r.sanitary_score),
-            scaledSize: new google.maps.Size(sel ? 48 : 32, sel ? 48 : 32),
-            },
-            title: r.name,
-            zIndex: sel ? 1000 : undefined,
-        });
-        m.addListener("click", () => handleSelect(r));
-        return m;
+            const sel = selectedRestaurant?.siret === r.siret;
+            const m = new google.maps.Marker({
+                position: { lat: r.lat, lng: r.lng },
+                icon: {
+                    url: getSymbolIcon(r.sanitary_score),
+                    scaledSize: new google.maps.Size(sel ? 48 : 32, sel ? 48 : 32),
+                },
+                title: r.name,
+                zIndex: sel ? 1000 : undefined,
+            });
+            m.addListener("click", () => handleSelect(r));
+            return m;
         });
         clustererRef.current = new MarkerClusterer({ map, markers });
         markersRef.current = markers;
@@ -138,60 +139,61 @@ export default function MapWrapper() {
 
     return (
         <LoadScript googleMapsApiKey={key} libraries={googleLibraries}>
-        <Box
-            sx={{
-            position: "absolute",
-            top: 10,
-            left: 10,
-            zIndex: 9999,
-            width: isMobile ? "90%" : 420,
-            display: "flex",
-            gap: 1,
-            }}
-        >
-            <Box sx={{ flexGrow: 1 }}>
-                <SearchBar onSearch={handleSearch} />
-            </Box>
-            <Button
-                variant="outlined"
-                sx={{ bgcolor: "white" }}
-                onClick={() => setFiltersOpen((o) => !o)}
+            <Box
+                sx={{
+                    position: "absolute",
+                    top: 10,
+                    left: 10,
+                    zIndex: 9999,
+                    width: isMobile ? "90%" : 420,
+                    display: "flex",
+                    gap: 1,
+                }}
             >
-                Filtrer
-            </Button>
-        </Box>
+                <Box sx={{ flexGrow: 1 }}>
+                    <SearchBar onSearch={handleSearch} />
+                </Box>
+                <Button
+                    variant="outlined"
+                    sx={{ bgcolor: "white" }}
+                    onClick={() => setFiltersOpen((o) => !o)}
+                >
+                    Filtrer
+                </Button>
+            </Box>
 
-        <FilterBar
-            visible={filtersOpen}
-            isMobile={isMobile}
-            onClose={() => setFiltersOpen(false)}
-            onClear={handleClearFilters}
-            onSearch={handleFilterSearch}
-        />
-
-        <GoogleMap
-            mapContainerStyle={containerStyle}
-            center={mapCenter}
-            zoom={6}
-            onLoad={onMapLoad}
-            options={{
-            disableDefaultUI: true,
-            zoomControl: false,
-            mapTypeControl: false,
-            streetViewControl: false,
-            fullscreenControl: false,
-            }}
-        />
-
-        {selectedRestaurant && (
-            <RestaurantCard
-            restaurant={selectedRestaurant}
-            onClose={() => setSelectedRestaurant(null)}
-            isMobile={isMobile}
+            <FilterBar
+                visible={filtersOpen}
+                isMobile={isMobile}
+                onClose={() => setFiltersOpen(false)}
+                onClear={handleClearFilters}
+                onSearch={handleFilterSearch}
             />
-        )}
 
-        {searching && <OverlaySpinner />}
+            <GoogleMap
+                mapContainerStyle={containerStyle}
+                center={mapCenter}
+                zoom={6}
+                onLoad={onMapLoad}
+                options={{
+                    disableDefaultUI: true,
+                    zoomControl: false,
+                    mapTypeControl: false,
+                    streetViewControl: false,
+                    fullscreenControl: false,
+                }}
+            />
+
+            {selectedRestaurant && (
+                <RestaurantCard
+                    key={selectedRestaurant.siret}
+                    restaurant={selectedRestaurant}
+                    onClose={() => setSelectedRestaurant(null)}
+                    isMobile={isMobile}
+                />
+            )}
+
+            {searching && <OverlaySpinner />}
         </LoadScript>
     );
 }

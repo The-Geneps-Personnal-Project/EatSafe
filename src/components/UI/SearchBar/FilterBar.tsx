@@ -48,7 +48,7 @@ export default function FilterBar({
         value: string | number | null
     ) => {
         setFilters((prev) => {
-        if (value === null) {
+        if (value === null || value === "") {
             const copy = { ...prev };
             delete copy[field];
             return copy;
@@ -66,6 +66,13 @@ export default function FilterBar({
         onSearch(filters);
         onClose();
     };
+
+    const uniqueTypes = Array.from(
+        new Map(types.map((t) => [t.label, t])).values()
+    );
+
+    const getTypeOption = () =>
+        uniqueTypes.find((t) => t.value[0] === filters.place_type) || null;
 
     if (!visible) return null;
 
@@ -94,6 +101,7 @@ export default function FilterBar({
             display: "flex",
             justifyContent: "space-between",
             alignItems: "center",
+            mb: 2,
             }}
         >
             <Typography variant="h6">Filtres</Typography>
@@ -104,41 +112,59 @@ export default function FilterBar({
 
         <Box sx={{ width: "100%", display: "flex", gap: 2, mb: 2 }}>
             <TextField
-            label="Année"
-            type="number"
-            value={filters.year ?? ""}
-            onChange={(e) => handleChange("year", Number(e.target.value))}
-            sx={{ width: "30%" }}
-            />
+                select
+                label="Score Sanitaire"
+                value={filters.score ?? ""}
+                onChange={(e) => handleChange("score", Number(e.target.value))}
+                fullWidth
+            >
+                {[
+                    { value: 1, label: "1 – Très satisfaisant" },
+                    { value: 2, label: "2 – Satisfaisant" },
+                    { value: 3, label: "3 – A améliorer" },
+                    { value: 4, label: "4 – A corriger de manière urgente" },
+                ].map(({ value, label }) => (
+                <MenuItem key={value} value={value}>
+                    {label}
+                </MenuItem>
+                ))}
+            </TextField>
+
             <TextField
-            label="Score"
-            type="number"
-            inputProps={{ min: 1, max: 4 }}
-            value={filters.score ?? ""}
-            onChange={(e) => handleChange("score", Number(e.target.value))}
-            sx={{ width: "30%" }}
-            />
+                select
+                label="Notation Google"
+                value={filters.google_rating ?? ""}
+                onChange={(e) =>
+                handleChange("google_rating", Number(e.target.value))
+                }
+                fullWidth
+            >
+                {[1, 2, 3, 4, 5].map((n) => (
+                <MenuItem key={n} value={n}>
+                    {n}
+                </MenuItem>
+                ))}
+            </TextField>
         </Box>
 
-        <TextField
-            select
-            label="Type"
-            value={filters.place_type ?? ""}
-            onChange={(e) => handleChange("place_type", e.target.value)}
-            sx={{ width: "45%", mb: 2 }}
-        >
-            {types.map((o) => (
-            <MenuItem key={o.value} value={o.value}>
-                {o.label}
-            </MenuItem>
-            ))}
-        </TextField>
 
-        <Box sx={{ width: "100%", display: "flex", gap: 2 }}>
+        <Autocomplete
+            options={uniqueTypes}
+            getOptionLabel={(opt) => opt.label}
+            value={getTypeOption()}
+            onChange={(_, v) => handleChange("place_type", v?.value[0] || null)}
+            renderInput={(params) => <TextField {...params} label="Type" />}
+            clearOnEscape
+            sx={{ mb: 2 }}
+        />
+
+        <Box sx={{ width: "100%", display: "flex", gap: 2, mb: 2 }}>
             <Autocomplete
             options={regions}
             getOptionLabel={(opt) => opt.label}
-            value={regions.find((r) => r.value === filters.reg_code) || null}
+            value={
+                regions.find((r) => r.value === filters.reg_code) || null
+            }
             onChange={(_, v) => handleChange("reg_code", v?.value || null)}
             fullWidth
             renderInput={(p) => <TextField {...p} label="Région" />}
@@ -148,7 +174,9 @@ export default function FilterBar({
             <Autocomplete
             options={departments}
             getOptionLabel={(opt) => opt.label}
-            value={departments.find((d) => d.value === filters.dep_code) || null}
+            value={
+                departments.find((d) => d.value === filters.dep_code) || null
+            }
             onChange={(_, v) => handleChange("dep_code", v?.value || null)}
             fullWidth
             renderInput={(p) => <TextField {...p} label="Département" />}
@@ -165,7 +193,7 @@ export default function FilterBar({
             }}
         >
             <Button variant="outlined" onClick={handleClear}>
-            Effacer les filtres
+            Effacer
             </Button>
             <Button variant="contained" onClick={handleSubmit}>
             Rechercher

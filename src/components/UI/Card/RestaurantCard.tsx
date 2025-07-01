@@ -1,4 +1,4 @@
-import { Box, useTheme, useMediaQuery } from "@mui/material";
+import { Box, Divider } from "@mui/material";
 import RestaurantCardHeader from "./CardHeader";
 import RestaurantCardDetails from "./CardDetails";
 import RestaurantCardMobileDrawer from "./CardMobileDrawer";
@@ -22,7 +22,7 @@ const boxSx = {
     zIndex: 9999,
     overflowY: "auto",
     p: 3
-}
+};
 
 const RestaurantCard = ({ restaurant, onClose, isMobile }: Props) => {
     if (isMobile) {
@@ -32,6 +32,7 @@ const RestaurantCard = ({ restaurant, onClose, isMobile }: Props) => {
     return (
         <Box sx={boxSx}>
             <RestaurantCardHeader restaurant={restaurant} onClose={onClose} />
+            <Divider sx={{ my: 2 }} />
             <RestaurantCardDetails restaurant={restaurant} />
         </Box>
     );

@@ -1,5 +1,5 @@
 import React from "react";
-import { Box, Typography } from "@mui/material";
+import { Stack, Typography } from "@mui/material";
 
 interface Props {
     level: number;    
@@ -9,11 +9,16 @@ const PriceLevel: React.FC<Props> = ({ level }) => {
     if (!level || level < 1) return null;
 
     return (
-        <Box mt={1}>
-            <Typography variant="body2" color="text.primary" sx={{ fontWeight: 500 }}>
-                💵 Indice de Prix: {"$".repeat(level)}
+        <Stack direction="row" alignItems="center" spacing={1}>
+            <Typography variant="caption" color="text.primary">
+                Indice de Prix :
             </Typography>
-        </Box>
+            <Stack direction="row" alignItems="center" spacing={0.5}>
+                <Typography variant="subtitle2" sx={{ whiteSpace: "nowrap" }}>
+                    {"€".repeat(level)}
+                </Typography>
+            </Stack>
+        </Stack>
     );
 };
 

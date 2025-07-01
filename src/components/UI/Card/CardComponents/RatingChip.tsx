@@ -7,13 +7,13 @@ export const getRatingColor = (rating: 1 | 2 | 3 | 4): string => {
         case 3: return "#ff9800"; // Orange
         case 4: return "#f44336"; // Red
     }
-}
+};
 
 const ratingLabels: Record<1 | 2 | 3 | 4, string> = {
     1: "Très satisfaisant",
     2: "Satisfaisant",
-    3: "A améliorer",
-    4: "A corriger de manière urgente"
+    3: "À améliorer",
+    4: "À corriger de manière urgente"
 };
 
 type Props = {
@@ -22,7 +22,7 @@ type Props = {
 
 const RatingChip = ({ score }: Props) => (
     <Box display="flex" alignItems="center" gap={1} mt={2}>
-        <Typography variant="subtitle2" fontWeight={600}>
+        <Typography variant="caption" color="text.primary">
             Score sanitaire
         </Typography>
         <Chip

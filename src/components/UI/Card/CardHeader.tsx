@@ -1,70 +1,56 @@
-import React from "react";
-import { Box, Typography, IconButton, useTheme, useMediaQuery } from "@mui/material";
+import {
+    CardHeader,
+    IconButton,
+    Typography,
+    Stack,
+    Chip
+} from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
-import PriceLevel from "./CardComponents/PriceLevel";
-import GoogleRating from "./CardComponents/GoogleRating";
 import type { Restaurant } from "@schemas/restaurant";
 import RatingChip from "./CardComponents/RatingChip";
-import { formatDate } from "@/utils/format";
+import PriceLevel from "./CardComponents/PriceLevel";
+import GoogleRating from "./CardComponents/GoogleRating";
 
-type Props = {
+interface Props {
     restaurant: Restaurant;
     onClose: () => void;
-};
+}
 
-const RestaurantCardHeader: React.FC<Props> = ({ restaurant, onClose }) => {
-    const theme = useTheme();
-    const isDesktop = useMediaQuery(theme.breakpoints.up("md"));
-
+export default function CustomCardHeader({
+    restaurant,
+    onClose
+}: Props) {
     return (
-        <Box px={3} pt={2} pb={1}>
-        <Box display="flex" justifyContent="space-between" alignItems="center">
-            <Typography variant="h6" fontWeight={600}>
-            {restaurant.name}
-            </Typography>
-
-            {isDesktop && (
-            <IconButton onClick={onClose} size="small">
-                <CloseIcon />
-            </IconButton>
-            )}
-        </Box>
-
-        {restaurant.price_level !== undefined && (
-            <Box mt={0.5}>
-            <PriceLevel level={restaurant.price_level} />
-            </Box>
-        )}
-
-        {restaurant.google_rating && (
-            <GoogleRating
-            rating={restaurant.google_rating}
-            user_ratings_total={restaurant.user_ratings_total ?? -1}
-            />
-        )}
-
-        {restaurant.sanitary_score ? (
-            <>
-                <RatingChip score={restaurant.sanitary_score} />
-                <Typography variant="subtitle2" mt={1}>
-                    🧪 Inspection : {restaurant.inspection_date ? formatDate(restaurant.inspection_date) : "N/A"}
+        <CardHeader
+            sx={{ pb: 0, px: 0 }}
+            title={
+                <Typography variant="h6" fontWeight="bold">
+                    {restaurant.name}
                 </Typography>
-            </>
-        ) : (
-                <Typography variant="subtitle2" mt={2}>
-                Aucune donnée sanitaire trouvée
-                </Typography>
-            )}
-        <Box mt={1}>
-            <Box
-                sx={{
-                    borderTop: "3px solid #e0e0e0",
-                    width: "100%",
-                }}
-            />
-        </Box>
-        </Box>
+            }
+            subheader={
+                <Stack direction="column" spacing={1} mt={1}>
+                    {restaurant.price_level && (
+                        <PriceLevel level={restaurant.price_level}/>
+                    )}
+
+                    {restaurant.sanitary_score && (
+                        <RatingChip score={restaurant.sanitary_score} />
+                    )}
+
+                    {restaurant.google_rating  && (
+                        <GoogleRating
+                            rating={restaurant.google_rating}
+                            user_ratings_total={restaurant.user_ratings_total || 0}
+                        />
+                    )}
+                </Stack>
+            }
+            action={
+                <IconButton onClick={onClose}>
+                    <CloseIcon />
+                </IconButton>
+            }
+        />
     );
-};
-
-export default RestaurantCardHeader;
+}
