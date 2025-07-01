@@ -1,176 +1,197 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
+import { GoogleMap, LoadScript } from "@react-google-maps/api";
+import { useTheme, useMediaQuery, Box, Button } from "@mui/material";
+import { getSymbolIcon } from "@utils/markerColors";
+import RestaurantCard from "@components/UI/Card/RestaurantCard";
+import SearchBar from "@components/UI/SearchBar/SearchBar";
+import OverlaySpinner from "@components/UI/Spinner/OverlaySpinner";
+import FilterBar from "@components/UI/SearchBar/FilterBar";
+import { useMapHandlers } from "@hooks/useMapHandler";
+import type { Restaurant } from "@schemas/restaurant";
+import type { FilterValues } from "@schemas/filter";
 import {
-    GoogleMap,
-    LoadScript,
-    Marker,
-    MarkerClusterer
-} from "@react-google-maps/api";
-import { useTheme, useMediaQuery, Box, Typography } from "@mui/material";
-import { mockRestaurants } from "../../utils/mockRestaurants";
-import { getSymbolIcon } from "../../utils/markerColors";
-import { Restaurant } from "../../types/restaurant";
-import RestaurantCard from "../UI/Card/RestaurantCard";
-import Spinner from "../UI/Spinner/Spinner";
-import SearchBar from "../UI/SearchBar/SearchBar";
-import { usePlaceDetails } from "../../hooks/usePlaceDetails";
+    fetchFilteredRestaurants,
+    fetchRestaurantDetail,
+    fetchRestaurantDetailByName,
+} from "@services/restaurantService";
+import { MarkerClusterer } from "@googlemaps/markerclusterer";
 
-const containerStyle = {
-    width: "100%",
-    height: "100vh"
-};
+const containerStyle = { width: "100%", height: "100vh" };
+const DEFAULT_CENTER = { lat: 46.603354, lng: 1.888334 };
+const googleLibraries: ("places")[] = ["places"];
 
-const center = {
-    lat: 46.603354,
-    lng: 1.888334
-};
+export default function MapWrapper() {
+    const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
+    const [currentZoom, setCurrentZoom] = useState(6);
+    const [searching, setSearching] = useState(false);
+    const [filtersOpen, setFiltersOpen] = useState(false);
 
-const MapWrapper = () => {
-    const mapRef = useRef<google.maps.Map | null>(null);
-
-    // const [fallbackMarker, setFallbackMarker] = useState<google.maps.LatLngLiteral | null>(null);
-    const [googlePlace, setGooglePlace] = useState<google.maps.places.PlaceResult | null>(null);
-
-    const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
-    const [dataLoaded, setDataLoaded] = useState(false);
+    const markersRef = useRef<google.maps.Marker[]>([]);
+    const clustererRef = useRef<MarkerClusterer | null>(null);
+    const detailCacheRef = useRef<Map<string, Restaurant>>(new Map());
 
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
-    const { fetchPlaceDetails } = usePlaceDetails();
+    const { mapRef, setMapElement, selectedRestaurant, setSelectedRestaurant } =
+        useMapHandlers();
 
-    const handleSearchSelect = (restaurant: Restaurant) => {
-        setSelectedRestaurant(restaurant);
-        if (mapRef.current) {
-            mapRef.current.panTo({ lat: restaurant.lat, lng: restaurant.lng });
-            mapRef.current.setZoom(16);
+    const key = process.env.REACT_APP_GOOGLE_MAPS_API_KEY!;
+
+    useEffect(() => {
+        navigator.geolocation.getCurrentPosition(
+        ({ coords }) =>
+            setMapCenter({ lat: coords.latitude, lng: coords.longitude }),
+        () => setMapCenter(DEFAULT_CENTER)
+        );
+    }, []);
+
+    const handleSelect = async (r: Restaurant) => {
+        const cached = detailCacheRef.current.get(r.siret);
+        if (cached) return setSelectedRestaurant(cached);
+
+        try {
+        const data = await fetchRestaurantDetail(r.siret);
+        detailCacheRef.current.set(r.siret, data);
+        setSelectedRestaurant(data);
+        if (mapRef.current && currentZoom < 15) {
+            mapRef.current.panTo({ lat: data.lat, lng: data.lng });
+            mapRef.current.setZoom(15);
+        }
+        } catch (e) {
+        console.error(e);
         }
     };
 
-    const handleFallbackSearch = async (query: string) => {
-        if (!window.google) return;
-
-        const autocompleteService = new window.google.maps.places.AutocompleteService();
-        autocompleteService.getPlacePredictions(
-            { input: query, componentRestrictions: { country: "fr" } },
-            async (predictions, status) => {
-                if (status !== window.google.maps.places.PlacesServiceStatus.OK || !predictions?.[0]) return;
-                const place = await fetchPlaceDetails(predictions[0].place_id);
-                if (!place?.geometry?.location) return;
-                const position = place.geometry.location;
-                mapRef.current?.panTo(position);
-                mapRef.current?.setZoom(15);
-                if (place.types?.includes("restaurant")) {
-                    setGooglePlace(place);
-                } else {
-                    setGooglePlace(null);
-                }
-                setSelectedRestaurant(null);
-            }
-        );
+    const clearMarkers = () => {
+        markersRef.current.forEach((m) => m.setMap(null));
+        markersRef.current = [];
+        clustererRef.current?.clearMarkers();
+        clustererRef.current = null;
     };
-    
-    // Simulate data loading while fetching part is not implemented
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            setDataLoaded(true);
-        }, 1500);
-        return () => clearTimeout(timer);
-    }, []);
+
+    const handleClearFilters = () => {
+        clearMarkers();
+    };
+
+    const handleSearch = async (name: string, city: string) => {
+        try {
+        const r = await fetchRestaurantDetailByName(name, city);
+        setSelectedRestaurant(r);
+        if (mapRef.current) {
+            clearMarkers();
+            createNativeMarkers(mapRef.current, [r]);
+            mapRef.current.panTo({ lat: r.lat, lng: r.lng });
+            mapRef.current.setZoom(16);
+        }
+        } catch {
+        console.error("No match for", name, city);
+        }
+    };
+
+    const handleFilterSearch = async (filters: FilterValues) => {
+        setSearching(true);
+        try {
+        const data = await fetchFilteredRestaurants(filters);
+        setFiltersOpen(false);
+        if (mapRef.current && data.length) {
+            const bounds = new google.maps.LatLngBounds();
+            data.forEach((r) => bounds.extend({ lat: r.lat, lng: r.lng }));
+            mapRef.current.fitBounds(bounds);
+            createNativeMarkers(mapRef.current, data);
+        }
+        } catch (e) {
+        console.error(e);
+        } finally {
+        setSearching(false);
+        }
+    };
+
+    const createNativeMarkers = (
+        map: google.maps.Map,
+        restaurants: Restaurant[]
+    ) => {
+        clearMarkers();
+        const markers = restaurants.map((r) => {
+        const sel = selectedRestaurant?.siret === r.siret;
+        const m = new google.maps.Marker({
+            position: { lat: r.lat, lng: r.lng },
+            icon: {
+            url: getSymbolIcon(r.sanitary_score),
+            scaledSize: new google.maps.Size(sel ? 48 : 32, sel ? 48 : 32),
+            },
+            title: r.name,
+            zIndex: sel ? 1000 : undefined,
+        });
+        m.addListener("click", () => handleSelect(r));
+        return m;
+        });
+        clustererRef.current = new MarkerClusterer({ map, markers });
+        markersRef.current = markers;
+    };
+
+    const onMapLoad = (map: google.maps.Map) => {
+        mapRef.current = map;
+        setMapElement(map);
+        setCurrentZoom(map.getZoom() ?? 6);
+    };
 
     return (
-        <LoadScript googleMapsApiKey={process.env.REACT_APP_GOOGLE_MAPS_API_KEY as string} libraries={["places"]}>
-            <GoogleMap
-                mapContainerStyle={containerStyle}
-                center={center}
-                zoom={6}
-                onLoad={(map) => { mapRef.current = map }}
-                options={{
-                    disableDefaultUI: true,
-                    zoomControl: true,
-                    mapTypeControl: false,
-                    streetViewControl: false,
-                    fullscreenControl: false
-                }}
+        <LoadScript googleMapsApiKey={key} libraries={googleLibraries}>
+        <Box
+            sx={{
+            position: "absolute",
+            top: 10,
+            left: 10,
+            zIndex: 9999,
+            width: isMobile ? "90%" : 420,
+            display: "flex",
+            gap: 1,
+            }}
+        >
+            <Box sx={{ flexGrow: 1 }}>
+                <SearchBar onSearch={handleSearch} />
+            </Box>
+            <Button
+                variant="outlined"
+                sx={{ bgcolor: "white" }}
+                onClick={() => setFiltersOpen((o) => !o)}
             >
-                <SearchBar
-                    onSelect={(restaurant) => {
-                        mapRef.current?.panTo({ lat: restaurant.lat, lng: restaurant.lng });
-                        mapRef.current?.setZoom(15);
-                        setSelectedRestaurant(restaurant);
-                        setGooglePlace(null);
-                    }}
-                    onFallbackSearch={handleFallbackSearch}
-                />
+                Filtrer
+            </Button>
+        </Box>
 
-                {dataLoaded && (
-                    <>
-                        <MarkerClusterer>
-                            {(clusterer) => (
-                                <>
-                                    {mockRestaurants.map((restaurant) => (
-                                        <Marker
-                                            key={restaurant.id}
-                                            position={{ lat: restaurant.lat, lng: restaurant.lng }}
-                                            icon={getSymbolIcon(restaurant.rating)}
-                                            clusterer={clusterer}
-                                            title={restaurant.name}
-                                            onClick={() => {
-                                                setSelectedRestaurant(restaurant);
-                                                setGooglePlace(null);
-                                                if (mapRef.current) {
-                                                    mapRef.current.panTo({ lat: restaurant.lat, lng: restaurant.lng });
-                                                    mapRef.current.setZoom(16);
-                                                }
-                                            }}
-                                        />
-                                    ))}
-                                </>
-                            )}
-                        </MarkerClusterer>
+        <FilterBar
+            visible={filtersOpen}
+            isMobile={isMobile}
+            onClose={() => setFiltersOpen(false)}
+            onClear={handleClearFilters}
+            onSearch={handleFilterSearch}
+        />
 
-                        {selectedRestaurant && (
-                            <RestaurantCard
-                                restaurant={selectedRestaurant}
-                                onClose={() => setSelectedRestaurant(null)}
-                                isMobile={isMobile}
-                            />
-                        )}
+        <GoogleMap
+            mapContainerStyle={containerStyle}
+            center={mapCenter}
+            zoom={6}
+            onLoad={onMapLoad}
+            options={{
+            disableDefaultUI: true,
+            zoomControl: false,
+            mapTypeControl: false,
+            streetViewControl: false,
+            fullscreenControl: false,
+            }}
+        />
 
-                        {googlePlace?.geometry?.location && (
-                            <Marker
-                                position={{
-                                    lat: googlePlace.geometry.location.lat(),
-                                    lng: googlePlace.geometry.location.lng()
-                                }}
-                                title={googlePlace.name}
-                            />
-                        )}
-                    </>
-                )}
-            </GoogleMap>
+        {selectedRestaurant && (
+            <RestaurantCard
+            restaurant={selectedRestaurant}
+            onClose={() => setSelectedRestaurant(null)}
+            isMobile={isMobile}
+            />
+        )}
 
-            {!dataLoaded && (
-                <Box
-                    sx={{
-                        position: "fixed",
-                        inset: 0,
-                        bgcolor: "#fff",
-                        zIndex: 9999,
-                        display: "grid",
-                        placeItems: "center",
-                        textAlign: "center"
-                    }}
-                >
-                    <Box>
-                        <Typography variant="h6" fontWeight={700} color="black" mb={2}>
-                            🕵️‍♂️ Inspection sanitaire en cours...
-                        </Typography>
-                        <Spinner />
-                    </Box>
-                </Box>
-            )}
+        {searching && <OverlaySpinner />}
         </LoadScript>
     );
-};
-
-export default MapWrapper;
+}

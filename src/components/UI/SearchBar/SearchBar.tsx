@@ -1,46 +1,38 @@
-import { useMemo, useState, useEffect } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { Autocomplete, Box, TextField } from "@mui/material";
-import { mockRestaurants } from "../../../utils/mockRestaurants";
-import { Restaurant } from "../../../types/restaurant";
-import { useAutocompleteService } from "../../../hooks/useAutoCompleteService";
 import debounce from "lodash.debounce";
+import { useAutocompleteService } from "@hooks/useAutoCompleteService";
 
-type Option =
-    | { type: "local"; label: string; restaurant: Restaurant }
-    | { type: "google"; label: string; placeId: string };
+interface Props {
+    onSearch: (name: string, city: string) => void;
+}
 
-type Props = {
-    onSelect: (restaurant: Restaurant) => void; // Local search
-    onFallbackSearch: (query: string) => void; // Fallback search on google maps API
-};
+interface Option {
+    type: "google";
+    label: string;
+    placeId: string;
+    name: string;
+    city: string;
+}
 
-const SearchBar = ({ onSelect, onFallbackSearch }: Props) => {
+const SearchBar = ({ onSearch }: Props) => {
     const [inputValue, setInputValue] = useState("");
     const [options, setOptions] = useState<Option[]>([]);
     const { getPredictions } = useAutocompleteService();
 
     const handleSearch = async (value: string) => {
-        const localResults: Option[] = mockRestaurants
-            .filter((r) => r.name.toLowerCase().includes(value.toLowerCase()))
-            .map((r) => ({
-                type: "local",
-                label: r.name,
-                restaurant: r
-            }));
-
-        if (localResults.length >= 5) {
-            setOptions(localResults);
-            return;
-        }
-
         const googleResults = await getPredictions(value);
-        const formattedGoogle: Option[] = googleResults.map((p) => ({
-            type: "google",
-            label: p.description,
-            placeId: p.place_id
-        }));
-
-        setOptions([...localResults, ...formattedGoogle]);
+        const formatted: Option[] = googleResults.map((p) => {
+            const [namePart, ...rest] = p.description.split(",");
+            return {
+                type: "google",
+                label: p.description,
+                placeId: p.place_id,
+                name: namePart.trim(),
+                city: rest.join(",").trim()
+            };
+        });
+        setOptions(formatted);
     };
 
     const debouncedSearch = useMemo(() => debounce(handleSearch, 300), []);
@@ -51,7 +43,7 @@ const SearchBar = ({ onSelect, onFallbackSearch }: Props) => {
     }, [inputValue]);
 
     return (
-        <Box sx={{ position: "absolute", top: 10, left: 10, zIndex: 9999, width: "90%", maxWidth: 400 }}>
+        <Box sx={{ width: "100%" }}>
             <Autocomplete
                 freeSolo
                 fullWidth
@@ -61,17 +53,16 @@ const SearchBar = ({ onSelect, onFallbackSearch }: Props) => {
                 onInputChange={(_, value) => setInputValue(value)}
                 onChange={(_, value) => {
                     if (!value || typeof value === "string") return;
-                    if (value.type === "local") {
-                        onSelect(value.restaurant);
-                    } else if (value.type === "google") {
-                        onFallbackSearch(value.label);
+                    if (value.type === "google") {
+                        onSearch(value.name, value.city);
                     }
                 }}
                 renderInput={(params) => (
                     <TextField
                         {...params}
-                        label="Rechercher un restaurant ou un lieu"
+                        label="Rechercher un restaurant ou une adresse"
                         variant="outlined"
+                        fullWidth
                         InputProps={{
                             ...params.InputProps,
                             type: "search"
