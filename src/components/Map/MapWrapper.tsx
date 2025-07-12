@@ -1,11 +1,21 @@
 import React, { useEffect, useRef, useState } from "react";
 import { GoogleMap, LoadScript } from "@react-google-maps/api";
-import { useTheme, useMediaQuery, Box, Button } from "@mui/material";
+import {
+    useTheme,
+    useMediaQuery,
+    Box,
+    Button,
+    Card,
+    IconButton,
+} from "@mui/material";
+import MenuIcon from "@mui/icons-material/Menu";
 import { getSymbolIcon } from "@utils/markerColors";
 import RestaurantCard from "@components/UI/Card/RestaurantCard";
 import SearchBar from "@components/UI/SearchBar/SearchBar";
 import OverlaySpinner from "@components/UI/Spinner/OverlaySpinner";
 import FilterBar from "@components/UI/SearchBar/FilterBar";
+import ContactModal from "@components/UI/SearchBar/ContactModal";
+import BuyMeACoffeeButton from "@components/UI/SearchBar/BuyMeACoffee";
 import { useMapHandlers } from "@hooks/useMapHandler";
 import type { Restaurant } from "@schemas/restaurant";
 import type { FilterValues } from "@schemas/filter";
@@ -25,6 +35,8 @@ export default function MapWrapper() {
     const [currentZoom, setCurrentZoom] = useState(6);
     const [searching, setSearching] = useState(false);
     const [filtersOpen, setFiltersOpen] = useState(false);
+    const [contactOpen, setContactOpen] = useState(false);
+    const [menuOpen, setMenuOpen] = useState(false);
 
     const markersRef = useRef<google.maps.Marker[]>([]);
     const clustererRef = useRef<MarkerClusterer | null>(null);
@@ -33,8 +45,12 @@ export default function MapWrapper() {
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down("md"));
 
-    const { mapRef, setMapElement, selectedRestaurant, setSelectedRestaurant } =
-        useMapHandlers();
+    const {
+        mapRef,
+        setMapElement,
+        selectedRestaurant,
+        setSelectedRestaurant,
+    } = useMapHandlers();
 
     const key = process.env.REACT_APP_GOOGLE_MAPS_API_KEY!;
 
@@ -52,7 +68,6 @@ export default function MapWrapper() {
         try {
             const data = await fetchRestaurantDetail(r.siret);
             detailCacheRef.current.set(r.siret, data);
-            // force card to remount to pick up new photos
             setSelectedRestaurant(null);
             setSelectedRestaurant(data);
             if (mapRef.current && currentZoom < 15) {
@@ -108,10 +123,7 @@ export default function MapWrapper() {
         }
     };
 
-    const createNativeMarkers = (
-        map: google.maps.Map,
-        restaurants: Restaurant[]
-    ) => {
+    const createNativeMarkers = (map: google.maps.Map, restaurants: Restaurant[]) => {
         clearMarkers();
         const markers = restaurants.map((r) => {
             const sel = selectedRestaurant?.siret === r.siret;
@@ -148,19 +160,77 @@ export default function MapWrapper() {
                     width: isMobile ? "90%" : 420,
                     display: "flex",
                     gap: 1,
+                    alignItems: "center",
                 }}
             >
                 <Box sx={{ flexGrow: 1 }}>
                     <SearchBar onSearch={handleSearch} />
                 </Box>
-                <Button
-                    variant="outlined"
-                    sx={{ bgcolor: "white" }}
-                    onClick={() => setFiltersOpen((o) => !o)}
-                >
-                    Filtrer
-                </Button>
+                {isMobile && (
+                    <IconButton
+                        onClick={() => setMenuOpen((prev) => !prev)}
+                        sx={{ bgcolor: "white", height: 40, width: 40 }}
+                    >
+                        <MenuIcon />
+                    </IconButton>
+                )}
+                {!isMobile && (
+                    <Button
+                        variant="outlined"
+                        sx={{ bgcolor: "white" }}
+                        onClick={() => setFiltersOpen((o) => !o)}
+                    >
+                        Filtrer
+                    </Button>
+                )}
             </Box>
+
+            {isMobile && menuOpen && (
+                <Card
+                    sx={{
+                        position: "absolute",
+                        top: 70,
+                        right: 10,
+                        p: 2,
+                        display: "flex",
+                        flexDirection: "column",
+                        gap: 1,
+                        zIndex: 1200,
+                    }}
+                >
+                    <Button variant="outlined" onClick={() => { setFiltersOpen(true); setMenuOpen(false); }}>
+                        🎯 Filtres
+                    </Button>
+                    <BuyMeACoffeeButton fullWidth />
+                    <Button variant="outlined" sx={{ bgcolor: "white" }} onClick={() => { setContactOpen(true); setMenuOpen(false); }}>
+                        📬 Contact
+                    </Button>
+                </Card>
+            )}
+
+            {!isMobile && (
+                <Box
+                    sx={{
+                        position: "absolute",
+                        bottom: 10,
+                        left: 10,
+                        display: "flex",
+                        gap: 1,
+                        zIndex: 1200,
+                    }}
+                >
+                    <BuyMeACoffeeButton />
+                    <Button
+                        variant="outlined"
+                        sx={{ bgcolor: "white" }}
+                        onClick={() => setContactOpen(true)}
+                    >
+                        📬 Contact
+                    </Button>
+                </Box>
+            )}
+
+            <ContactModal open={contactOpen} onClose={() => setContactOpen(false)} />
 
             <FilterBar
                 visible={filtersOpen}
