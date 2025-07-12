@@ -5,7 +5,4 @@ const axiosInstance = axios.create({
     withCredentials: false
 });
 
-console.log(process.env.REACT_APP_API_URL);
-console.log("Axios instance created with base URL:", axiosInstance.defaults.baseURL);
-
 export default axiosInstance;
