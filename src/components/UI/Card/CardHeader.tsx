@@ -2,8 +2,7 @@ import {
     CardHeader,
     IconButton,
     Typography,
-    Stack,
-    Chip
+    Stack
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import type { Restaurant } from "@schemas/restaurant";
