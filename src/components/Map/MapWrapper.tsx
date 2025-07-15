@@ -126,7 +126,7 @@ export default function MapWrapper() {
                 }
                 return;
             } else if (result.type === "city") {
-                const r = await getPlaceDetails(result.placeId);
+                const r = await getPlaceDetails(result.placeId!);
                 setMapCenter({ lat: r?.geometry?.location?.lat() || DEFAULT_CENTER.lat, lng: r?.geometry?.location?.lng() || DEFAULT_CENTER.lng });
                 if (mapRef.current) {
                     mapRef.current.panTo({ lat: r?.geometry?.location?.lat() || DEFAULT_CENTER.lat, lng: r?.geometry?.location?.lng() || DEFAULT_CENTER.lng });

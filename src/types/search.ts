@@ -5,7 +5,7 @@ export interface Props {
 export interface Option {
     type: "restaurant" | "city";
     label: string;
-    placeId: string;
+    placeId?: string;
     name: string;
     city: string;
     lng?: number;
