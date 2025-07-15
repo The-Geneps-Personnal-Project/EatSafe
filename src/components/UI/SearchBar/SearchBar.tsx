@@ -27,7 +27,7 @@ const SearchBar = ({ onSearch }: Props) => {
                 label: `${p.description}`,
                 placeId: p.place_id,
                 name: namePart.trim(),
-                city: rest.join(",").trim(),
+                city: namePart.trim(),
             };
         });
 

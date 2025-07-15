@@ -126,11 +126,24 @@ export default function MapWrapper() {
                 }
                 return;
             } else if (result.type === "city") {
-                const r = await getPlaceDetails(result.placeId!);
-                setMapCenter({ lat: r?.geometry?.location?.lat() || DEFAULT_CENTER.lat, lng: r?.geometry?.location?.lng() || DEFAULT_CENTER.lng });
+                setSelectedRestaurant(null);
+                clearMarkers();
+
+                const place = await getPlaceDetails(result.placeId!);
+                const location = place?.geometry?.location;
+                const lat = location?.lat() ?? DEFAULT_CENTER.lat;
+                const lng = location?.lng() ?? DEFAULT_CENTER.lng;
+
+                setMapCenter({ lat, lng });
                 if (mapRef.current) {
-                    mapRef.current.panTo({ lat: r?.geometry?.location?.lat() || DEFAULT_CENTER.lat, lng: r?.geometry?.location?.lng() || DEFAULT_CENTER.lng });
+                    mapRef.current.panTo({ lat, lng });
                     mapRef.current.setZoom(14);
+                }
+
+                const restaurants = await fetchFilteredRestaurants({ city: result.city });
+
+                if (restaurants.length && mapRef.current) {
+                    createNativeMarkers(mapRef.current, restaurants);
                 }
             }
         } catch {
