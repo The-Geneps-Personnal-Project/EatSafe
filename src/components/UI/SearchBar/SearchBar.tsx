@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Autocomplete, Box, TextField } from "@mui/material";
 import debounce from "lodash.debounce";
 import { useAutocompleteService } from "@hooks/useAutoCompleteService";
@@ -11,56 +11,53 @@ const SearchBar = ({ onSearch }: Props) => {
     const [options, setOptions] = useState<Option[]>([]);
     const { getPredictions } = useAutocompleteService();
 
-    const handleSearch = async (rawValue: string) => {
-        const value = rawValue.trim();
-        if (value.length < 2) return;
+    const debouncedSearchRef = useRef(
+        debounce(async (rawValue: string) => {
+            const value = rawValue.trim();
+            if (value.length < 2) return;
 
-        const [googleResults, dbResults] = await Promise.all([
-            getPredictions(value),
-            searchRestaurants(value),
-        ]);
+            const [googleResults, dbResults] = await Promise.all([
+                getPredictions(value),
+                searchRestaurants(value),
+            ]);
 
-        const formattedGoogle: Option[] = googleResults.slice(0, 2).map((p) => {
-            const [namePart, ...rest] = p.description.split(",");
-            return {
-                type: "city",
-                label: `${p.description}`,
-                placeId: p.place_id,
-                name: namePart.trim(),
-                city: namePart.trim(),
-            };
-        });
+            const formattedGoogle: Option[] = googleResults.slice(0, 2).map((p) => {
+                const [namePart] = p.description.split(",");
+                return {
+                    type: "city",
+                    label: `${p.description}`,
+                    placeId: p.place_id,
+                    name: namePart.trim(),
+                    city: namePart.trim(),
+                };
+            });
 
-        const formattedDB: Option[] = dbResults.map((r) => ({
-            type: "restaurant",
-            label: `${toTitleCase(r.name)} - ${toTitleCase(r.address)}, ${toTitleCase(r.city)}`,
-            name: r.name,
-            city: r.city,
-            address: r.address,
-            siret: r.siret,
-            lat: r.lat,
-            lng: r.lng,
-        }));
+            const formattedDB: Option[] = dbResults.map((r) => ({
+                type: "restaurant",
+                label: `${toTitleCase(r.name)} - ${toTitleCase(r.address)}, ${toTitleCase(r.city)}`,
+                name: r.name,
+                city: r.city,
+                address: r.address,
+                siret: r.siret,
+                lat: r.lat,
+                lng: r.lng,
+            }));
 
-        setOptions([...formattedGoogle, ...formattedDB,]);
-    };
-
-    const debouncedSearch = useMemo(
-        () => debounce(handleSearch, 400),
-        []
+            setOptions([...formattedGoogle, ...formattedDB]);
+        }, 400)
     );
 
     useEffect(() => {
         const trimmed = inputValue.trim();
 
         if (trimmed.length >= 2) {
-            debouncedSearch(trimmed);
+            debouncedSearchRef.current(trimmed);
         } else {
             setOptions([]);
         }
 
         return () => {
-            debouncedSearch.cancel();
+            debouncedSearchRef.current.cancel();
         };
     }, [inputValue]);
 
