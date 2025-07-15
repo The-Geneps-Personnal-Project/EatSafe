@@ -57,3 +57,11 @@ export function extractCity(city: string): string {
     }
     return city.trim().split(" ")[0];
 }
+
+export const toTitleCase = (str: string): string => {
+    return str
+        .toLowerCase()
+        .split(" ")
+        .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+        .join(" ");
+};

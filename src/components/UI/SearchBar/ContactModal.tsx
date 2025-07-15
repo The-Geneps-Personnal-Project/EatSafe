@@ -6,10 +6,9 @@ import {
     DialogActions,
     TextField,
     Button,
-    Snackbar,
-    Alert,
 } from "@mui/material";
 import { sendContactMessage } from "@services/contactService";
+import Toast from "@components/UI/Toast/Toast";
 
 interface Props {
     open: boolean;
@@ -101,13 +100,12 @@ export default function ContactModal({ open, onClose }: Props) {
             </DialogActions>
         </Dialog>
 
-        <Snackbar
+        <Toast
             open={success}
-            autoHideDuration={4000}
+            message={"Message envoyé avec succès"}
+            severity="success"
             onClose={() => setSuccess(false)}
-        >
-            <Alert severity="success">Message envoyé avec succès</Alert>
-        </Snackbar>
+        />
         </>
     );
 }

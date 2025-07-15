@@ -9,6 +9,13 @@ export const fetchFilterData = async (): Promise<RestaurantFilterValues> => {
     return res.data;
 };
 
+export const searchRestaurants = async (query: string): Promise<Restaurant[]> => {
+    const res = await axios.get<Restaurant[]>("/restaurants/search", {
+        params: { q: query }
+    });
+    return res.data;
+};
+
 export const fetchFilteredRestaurants = async (
     filters: FilterValues
 ): Promise<Restaurant[]> => {

@@ -13,7 +13,7 @@ export const useAutocompleteService = () => {
         return new Promise((resolve, reject) => {
             if (!serviceRef.current || !input) return resolve([]);
             serviceRef.current.getPlacePredictions(
-                { input, componentRestrictions: { country: "fr" } },
+                { input, types: ["(cities)"], componentRestrictions: { country: "fr" } },
                 (predictions, status) => {
                     if (status !== "OK" || !predictions) return resolve([]);
                     resolve(predictions);
