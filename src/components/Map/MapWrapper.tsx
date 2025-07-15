@@ -127,7 +127,7 @@ export default function MapWrapper() {
         clearMarkers();
         const markers = restaurants.map((r) => {
             const sel = selectedRestaurant?.siret === r.siret;
-            const m = new google.maps.Marker({
+            const marker = new google.maps.Marker({
                 position: { lat: r.lat, lng: r.lng },
                 icon: {
                     url: getSymbolIcon(r.sanitary_score),
@@ -136,8 +136,8 @@ export default function MapWrapper() {
                 title: r.name,
                 zIndex: sel ? 1000 : undefined,
             });
-            m.addListener("click", () => handleSelect(r));
-            return m;
+            marker.addListener("click", () => handleSelect(r));
+            return marker;
         });
         clustererRef.current = new MarkerClusterer({ map, markers });
         markersRef.current = markers;

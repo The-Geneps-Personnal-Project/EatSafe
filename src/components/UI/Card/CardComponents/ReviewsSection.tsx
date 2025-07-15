@@ -1,5 +1,5 @@
 import { Box, Typography, Link } from "@mui/material";
-import type { Restaurant } from "@schemas/restaurant";
+import type { Restaurant, Review } from "@schemas/restaurant";
 import ReviewsList from "./Reviews/ReviewsList";
 
 interface Props {
@@ -20,7 +20,7 @@ export default function ReviewsSection({ restaurant }: Props) {
                     Aucune donnée trouvée.
                 </Typography>
             ) : (
-                <ReviewsList reviews={reviews.filter((r) => typeof r.rating === "number") as any} />
+                <ReviewsList reviews={reviews.filter((r) => typeof r.rating === "number" && r.rating !== undefined) as Review[]} />
             )}
 
             {reviews.length > 2 && (

@@ -26,22 +26,24 @@ export default function ContactModal({ open, onClose }: Props) {
 
     const handleSubmit = async () => {
         if (!message.trim()) {
-        setError("Le message est requis.");
-        return;
+            setError("Le message est requis.");
+            return;
         }
+
         setError("");
         setLoading(true);
+        
         try {
-        await sendContactMessage({ name, email, message });
-        setSuccess(true);
-        setName("");
-        setEmail("");
-        setMessage("");
-        onClose();
+            await sendContactMessage({ name, email, message });
+            setSuccess(true);
+            setName("");
+            setEmail("");
+            setMessage("");
+            onClose();
         } catch (err) {
-        setError("Erreur lors de l'envoi du message.");
+            setError("Erreur lors de l'envoi du message.");
         } finally {
-        setLoading(false);
+            setLoading(false);
         }
     };
 
