@@ -31,6 +31,7 @@ const DEFAULT_CENTER = { lat: 46.603354, lng: 1.888334 };
 const googleLibraries: ("places")[] = ["places"];
 
 export default function MapWrapper() {
+    const [isReady, setIsReady] = useState(false);
     const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
     const [currentZoom, setCurrentZoom] = useState(6);
     const [searching, setSearching] = useState(false);
@@ -56,8 +57,14 @@ export default function MapWrapper() {
 
     useEffect(() => {
         navigator.geolocation.getCurrentPosition(
-            ({ coords }) => setMapCenter({ lat: coords.latitude, lng: coords.longitude }),
-            () => setMapCenter(DEFAULT_CENTER)
+            ({ coords }) => {
+                setMapCenter({ lat: Number(coords.latitude), lng: Number(coords.longitude) });
+                setIsReady(true);
+            },
+            () => {
+                setMapCenter(DEFAULT_CENTER);
+                setIsReady(true);
+            }
         );
     }, []);
 
@@ -240,19 +247,21 @@ export default function MapWrapper() {
                 onSearch={handleFilterSearch}
             />
 
-            <GoogleMap
-                mapContainerStyle={containerStyle}
-                center={mapCenter}
-                zoom={6}
-                onLoad={onMapLoad}
-                options={{
-                    disableDefaultUI: true,
-                    zoomControl: false,
-                    mapTypeControl: false,
-                    streetViewControl: false,
-                    fullscreenControl: false,
-                }}
-            />
+            {isReady && (
+                <GoogleMap
+                    mapContainerStyle={containerStyle}
+                    center={mapCenter}
+                    zoom={6}
+                    onLoad={onMapLoad}
+                    options={{
+                        disableDefaultUI: true,
+                        zoomControl: false,
+                        mapTypeControl: false,
+                        streetViewControl: false,
+                        fullscreenControl: false,
+                    }}
+                />
+            )}
 
             {selectedRestaurant && (
                 <RestaurantCard
@@ -263,7 +272,7 @@ export default function MapWrapper() {
                 />
             )}
 
-            {searching && <OverlaySpinner />}
+            {(searching && isReady) && <OverlaySpinner />}
         </LoadScript>
     );
 }
