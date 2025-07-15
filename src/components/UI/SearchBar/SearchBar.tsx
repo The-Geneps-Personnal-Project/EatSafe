@@ -2,18 +2,7 @@ import { useEffect, useState, useMemo, useCallback } from "react";
 import { Autocomplete, Box, TextField } from "@mui/material";
 import debounce from "lodash.debounce";
 import { useAutocompleteService } from "@hooks/useAutoCompleteService";
-
-interface Props {
-    onSearch: (name: string, city: string) => void;
-}
-
-interface Option {
-    type: "google";
-    label: string;
-    placeId: string;
-    name: string;
-    city: string;
-}
+import { Props, Option} from "@/types/search";
 
 const SearchBar = ({ onSearch }: Props) => {
     const [inputValue, setInputValue] = useState("");
@@ -22,17 +11,19 @@ const SearchBar = ({ onSearch }: Props) => {
 
     const handleSearch = useCallback(async (value: string) => {
         const googleResults = await getPredictions(value);
+
         const formatted: Option[] = googleResults.map((p) => {
             const [namePart, ...rest] = p.description.split(",");
             return {
-                type: "google",
+                type: "city",
                 label: p.description,
                 placeId: p.place_id,
                 name: namePart.trim(),
                 city: rest.join(",").trim(),
             };
         });
-        setOptions(formatted);
+
+        setOptions([...formatted]);
     }, [getPredictions]);
 
     const debouncedSearch = useMemo(
@@ -65,9 +56,7 @@ const SearchBar = ({ onSearch }: Props) => {
                 onInputChange={(_, value) => setInputValue(value)}
                 onChange={(_, value) => {
                     if (!value || typeof value === "string") return;
-                    if (value.type === "google") {
-                        onSearch(value.name, value.city);
-                    }
+                    onSearch(value);
                 }}
                 renderInput={(params) => (
                     <TextField

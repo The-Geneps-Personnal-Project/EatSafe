@@ -27,6 +27,8 @@ import {
     fetchRestaurantDetailByName,
 } from "@services/restaurantService";
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
+import { Option } from "@/types/search";
+import { usePlaceDetails } from "@/hooks/usePlaceDetails";
 
 const containerStyle = { width: "100%", height: "100vh" };
 const DEFAULT_CENTER = { lat: 46.603354, lng: 1.888334 };
@@ -58,6 +60,8 @@ export default function MapWrapper() {
         selectedRestaurant,
         setSelectedRestaurant,
     } = useMapHandlers();
+
+    const { getPlaceDetails } = usePlaceDetails();
 
     const key = process.env.REACT_APP_GOOGLE_MAPS_API_KEY!;
 
@@ -109,15 +113,25 @@ export default function MapWrapper() {
         clearMarkers();
     };
 
-    const handleSearch = async (name: string, city: string) => {
+    const handleSearch = async (result: Option) => {
         try {
-            const r = await fetchRestaurantDetailByName(name, city);
-            setSelectedRestaurant(r);
-            if (mapRef.current) {
-                clearMarkers();
-                createNativeMarkers(mapRef.current, [r]);
-                mapRef.current.panTo({ lat: r.lat, lng: r.lng });
-                mapRef.current.setZoom(16);
+            if (result.type === "restaurant") {
+                const r = await fetchRestaurantDetailByName(result.name, result.city);
+                setSelectedRestaurant(r);
+                if (mapRef.current) {
+                    clearMarkers();
+                    createNativeMarkers(mapRef.current, [r]);
+                    mapRef.current.panTo({ lat: r.lat, lng: r.lng });
+                    mapRef.current.setZoom(16);
+                }
+                return;
+            } else if (result.type === "city") {
+                const r = await getPlaceDetails(result.placeId);
+                setMapCenter({ lat: r?.geometry?.location?.lat() || DEFAULT_CENTER.lat, lng: r?.geometry?.location?.lng() || DEFAULT_CENTER.lng });
+                if (mapRef.current) {
+                    mapRef.current.panTo({ lat: r?.geometry?.location?.lat() || DEFAULT_CENTER.lat, lng: r?.geometry?.location?.lng() || DEFAULT_CENTER.lng });
+                    mapRef.current.setZoom(14);
+                }
             }
         } catch {
             showToast("Aucun résultat trouvé pour cette recherche.", "warning");
