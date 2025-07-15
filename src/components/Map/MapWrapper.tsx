@@ -47,6 +47,8 @@ export default function MapWrapper() {
     const [toastMessage, setToastMessage] = useState("");
     const [toastSeverity, setToastSeverity] = useState<AlertColor>("info");
 
+    const cityCoordCache = useRef<Map<string, { lat: number; lng: number }>>(new Map());
+
     const markersRef = useRef<google.maps.Marker[]>([]);
     const clustererRef = useRef<MarkerClusterer | null>(null);
     const detailCacheRef = useRef<Map<string, Restaurant>>(new Map());
@@ -129,10 +131,17 @@ export default function MapWrapper() {
                 setSelectedRestaurant(null);
                 clearMarkers();
 
-                const place = await getPlaceDetails(result.placeId!);
-                const location = place?.geometry?.location;
-                const lat = location?.lat() ?? DEFAULT_CENTER.lat;
-                const lng = location?.lng() ?? DEFAULT_CENTER.lng;
+                let lat: number, lng: number;
+                const cached = cityCoordCache.current.get(result.placeId!);
+                if (cached) {
+                    ({ lat, lng } = cached);
+                } else {
+                    const place = await getPlaceDetails(result.placeId!);
+                    const location = place?.geometry?.location;
+                    lat = location?.lat() ?? DEFAULT_CENTER.lat;
+                    lng = location?.lng() ?? DEFAULT_CENTER.lng;
+                    cityCoordCache.current.set(result.placeId!, { lat, lng });
+                }
 
                 setMapCenter({ lat, lng });
                 if (mapRef.current) {
@@ -144,6 +153,8 @@ export default function MapWrapper() {
 
                 if (restaurants.length && mapRef.current) {
                     createNativeMarkers(mapRef.current, restaurants);
+                } else {
+                    showToast(`Aucun restaurant trouvé à ${result.city}.`, "warning");
                 }
             }
         } catch {
