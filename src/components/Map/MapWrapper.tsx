@@ -7,6 +7,7 @@ import {
     Button,
     Card,
     IconButton,
+    AlertColor,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import { getSymbolIcon } from "@utils/markerColors";
@@ -19,6 +20,7 @@ import BuyMeACoffeeButton from "@components/UI/SearchBar/BuyMeACoffee";
 import { useMapHandlers } from "@hooks/useMapHandler";
 import type { Restaurant } from "@schemas/restaurant";
 import type { FilterValues } from "@schemas/filter";
+import Toast from "@components/UI/Toast/Toast";
 import {
     fetchFilteredRestaurants,
     fetchRestaurantDetail,
@@ -38,6 +40,10 @@ export default function MapWrapper() {
     const [filtersOpen, setFiltersOpen] = useState(false);
     const [contactOpen, setContactOpen] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
+
+    const [toastOpen, setToastOpen] = useState(false);
+    const [toastMessage, setToastMessage] = useState("");
+    const [toastSeverity, setToastSeverity] = useState<AlertColor>("info");
 
     const markersRef = useRef<google.maps.Marker[]>([]);
     const clustererRef = useRef<MarkerClusterer | null>(null);
@@ -68,6 +74,12 @@ export default function MapWrapper() {
         );
     }, []);
 
+    const showToast = (msg: string, severity: AlertColor = "info") => {
+        setToastMessage(msg);
+        setToastSeverity(severity);
+        setToastOpen(true);
+    };
+
     const handleSelect = async (r: Restaurant) => {
         const cached = detailCacheRef.current.get(r.siret);
         if (cached) return setSelectedRestaurant(cached);
@@ -82,7 +94,7 @@ export default function MapWrapper() {
                 mapRef.current.setZoom(15);
             }
         } catch (e) {
-            console.error(e);
+            showToast("Aucun résultat trouvé pour ce restaurant.", "error");
         }
     };
 
@@ -108,7 +120,7 @@ export default function MapWrapper() {
                 mapRef.current.setZoom(16);
             }
         } catch {
-            console.error("No match for", name, city);
+            showToast("Aucun résultat trouvé pour cette recherche.", "warning");
         }
     };
 
@@ -122,9 +134,11 @@ export default function MapWrapper() {
                 data.forEach((r) => bounds.extend({ lat: r.lat, lng: r.lng }));
                 mapRef.current.fitBounds(bounds);
                 createNativeMarkers(mapRef.current, data);
+            } else {
+                showToast("Aucun résultat trouvé avec ces filtres.", "warning");
             }
         } catch (e) {
-            console.error(e);
+            console.error("Error fetching filtered restaurants:", e);
         } finally {
             setSearching(false);
         }
@@ -271,6 +285,13 @@ export default function MapWrapper() {
                     isMobile={isMobile}
                 />
             )}
+
+            <Toast
+                open={toastOpen}
+                message={toastMessage}
+                severity={toastSeverity}
+                onClose={() => setToastOpen(false)}
+            />
 
             {(searching && isReady) && <OverlaySpinner />}
         </LoadScript>
