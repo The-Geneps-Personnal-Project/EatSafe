@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Box, SwipeableDrawer } from "@mui/material";
+import { Box, Divider, SwipeableDrawer } from "@mui/material";
 import RestaurantCardHeader from "./CardHeader";
 import RestaurantCardDetails from "./CardDetails";
 import type { Restaurant } from "@schemas/restaurant";
@@ -57,6 +57,7 @@ const RestaurantCardMobileDrawer = ({ restaurant, onClose }: Props) => {
         <Box px={3} pt={1}>
             <RestaurantCardHeader restaurant={restaurant} onClose={onClose} />
         </Box>
+        <Divider sx={{ my: 2 }} />
         <Box sx={drawerContentSx(isExpanded)}>
             <RestaurantCardDetails restaurant={restaurant} />
         </Box>

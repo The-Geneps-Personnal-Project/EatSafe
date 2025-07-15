@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import { Autocomplete, Box, TextField } from "@mui/material";
 import debounce from "lodash.debounce";
 import { useAutocompleteService } from "@hooks/useAutoCompleteService";
@@ -20,7 +20,7 @@ const SearchBar = ({ onSearch }: Props) => {
     const [options, setOptions] = useState<Option[]>([]);
     const { getPredictions } = useAutocompleteService();
 
-    const handleSearch = async (value: string) => {
+    const handleSearch = useCallback(async (value: string) => {
         const googleResults = await getPredictions(value);
         const formatted: Option[] = googleResults.map((p) => {
             const [namePart, ...rest] = p.description.split(",");
@@ -29,18 +29,28 @@ const SearchBar = ({ onSearch }: Props) => {
                 label: p.description,
                 placeId: p.place_id,
                 name: namePart.trim(),
-                city: rest.join(",").trim()
+                city: rest.join(",").trim(),
             };
         });
         setOptions(formatted);
-    };
+    }, [getPredictions]);
 
-    const debouncedSearch = useMemo(() => debounce(handleSearch, 300), []);
+    const debouncedSearch = useMemo(
+        () => debounce(handleSearch, 300),
+        [handleSearch]
+    );
 
     useEffect(() => {
-        if (inputValue.length >= 2) debouncedSearch(inputValue);
-        else setOptions([]);
-    }, [inputValue]);
+        if (inputValue.length >= 2) {
+            debouncedSearch(inputValue);
+        } else if (options.length > 0) {
+            setOptions([]);
+        }
+
+        return () => {
+            debouncedSearch.cancel();
+        };
+    }, [inputValue, debouncedSearch, options.length]);
 
     return (
         <Box sx={{ width: "100%" }}>
@@ -49,7 +59,9 @@ const SearchBar = ({ onSearch }: Props) => {
                 fullWidth
                 disableClearable
                 options={options}
-                getOptionLabel={(option) => (typeof option === "string" ? option : option.label)}
+                getOptionLabel={(option) =>
+                    typeof option === "string" ? option : option.label
+                }
                 onInputChange={(_, value) => setInputValue(value)}
                 onChange={(_, value) => {
                     if (!value || typeof value === "string") return;
@@ -65,9 +77,13 @@ const SearchBar = ({ onSearch }: Props) => {
                         fullWidth
                         InputProps={{
                             ...params.InputProps,
-                            type: "search"
+                            type: "search",
                         }}
-                        sx={{ backgroundColor: "#fff", borderRadius: 1, boxShadow: 1 }}
+                        sx={{
+                            backgroundColor: "#fff",
+                            borderRadius: 1,
+                            boxShadow: 1,
+                        }}
                     />
                 )}
             />

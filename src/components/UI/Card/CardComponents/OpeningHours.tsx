@@ -1,5 +1,4 @@
-import React from "react";
-import { Box, Typography } from "@mui/material";
+import { List, ListItem, ListItemText } from "@mui/material";
 import { getWeekSchedule } from "@utils/format";
 
 interface Props {
@@ -9,18 +8,28 @@ interface Props {
     }[];
 }
 
-const OpeningHours: React.FC<Props> = ({periods }) => {
+export default function OpeningHours({ periods }: Props) {
     const weekSchedule = getWeekSchedule(periods);
 
     return (
-        <Box ml={1}>
-            {weekSchedule.map((line, i) => (
-            <Typography key={i} variant="body2" color="text.secondary">
-                {line}
-            </Typography>
+        <List disablePadding>
+            {weekSchedule.map((line, idx) => (
+                <ListItem
+                    key={idx}
+                    disableGutters
+                    sx={{ py: 0.25 }}
+                >
+                    <ListItemText
+                        primary={line}
+                        primaryTypographyProps={{
+                            variant: "body2",
+                            color: "text.secondary",
+                            lineHeight: 1,
+                            fontSize: "0.875rem"
+                        }}
+                    />
+                </ListItem>
             ))}
-        </Box>
+        </List>
     );
-};
-
-export default OpeningHours;
+}

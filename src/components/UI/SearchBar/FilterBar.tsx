@@ -1,19 +1,15 @@
 import { useEffect, useState } from "react";
-import {
-    Box,
-    Button,
-    Card,
-    MenuItem,
-    TextField,
-    Typography,
-    Autocomplete,
-} from "@mui/material";
+import { Box, Button, Card, Typography } from "@mui/material";
 import { fetchFilterData } from "@services/restaurantService";
 import type { FilterValues } from "@schemas/filter";
 import type {
     RestaurantFilterOption,
     RestaurantFilterValues,
 } from "@schemas/restaurant";
+import ScoreSelect from "./Components/ScoreSelect";
+import GoogleRatingSelect from "./Components/GoogleRating";
+import TypeAutocomplete from "./Components/TypeAutocomplete";
+import RegionDepartmentAutocomplete from "./Components/RegionDepartementAutocomplete";
 
 interface FilterBarProps {
     onSearch: (filters: FilterValues) => void;
@@ -37,18 +33,15 @@ export default function FilterBar({
 
     useEffect(() => {
         fetchFilterData().then((result: RestaurantFilterValues) => {
-        setTypes(result.types || []);
-        setRegions(result.regions || []);
-        setDepartments(result.departments || []);
+            setTypes(result.types || []);
+            setRegions(result.regions || []);
+            setDepartments(result.departments || []);
         });
     }, []);
 
-    const handleChange = (
-        field: keyof FilterValues,
-        value: string | number | null
-    ) => {
+    const handleChange = (field: keyof FilterValues, value: string | number | null) => {
         setFilters((prev) => {
-        if (value === null) {
+        if (value === null || value === "") {
             const copy = { ...prev };
             delete copy[field];
             return copy;
@@ -70,8 +63,9 @@ export default function FilterBar({
     if (!visible) return null;
 
     return (
+        <>
         <Card
-        sx={{
+            sx={{
             position: "fixed",
             top: isMobile ? "auto" : 70,
             bottom: isMobile ? 0 : "auto",
@@ -86,91 +80,33 @@ export default function FilterBar({
             zIndex: 1100,
             borderTopLeftRadius: isMobile ? 16 : 4,
             borderTopRightRadius: isMobile ? 16 : 4,
-        }}
-        >
-        <Box
-            sx={{
-            width: "100%",
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
             }}
         >
+            <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center", mb: 2 }}>
             <Typography variant="h6">Filtres</Typography>
-            <Button size="small" onClick={onClose}>
-            Fermer
-            </Button>
-        </Box>
+            <Button size="small" onClick={onClose}>Fermer</Button>
+            </Box>
 
-        <Box sx={{ width: "100%", display: "flex", gap: 2, mb: 2 }}>
-            <TextField
-            label="Année"
-            type="number"
-            value={filters.year ?? ""}
-            onChange={(e) => handleChange("year", Number(e.target.value))}
-            sx={{ width: "30%" }}
-            />
-            <TextField
-            label="Score"
-            type="number"
-            inputProps={{ min: 1, max: 4 }}
-            value={filters.score ?? ""}
-            onChange={(e) => handleChange("score", Number(e.target.value))}
-            sx={{ width: "30%" }}
-            />
-        </Box>
+            <Box sx={{ display: "flex", gap: 2, mb: 2 }}>
+            <ScoreSelect value={filters.score} onChange={(v) => handleChange("score", v)} />
+            <GoogleRatingSelect value={filters.google_rating} onChange={(v) => handleChange("google_rating", v)} />
+            </Box>
 
-        <TextField
-            select
-            label="Type"
-            value={filters.place_type ?? ""}
-            onChange={(e) => handleChange("place_type", e.target.value)}
-            sx={{ width: "45%", mb: 2 }}
-        >
-            {types.map((o) => (
-            <MenuItem key={o.value} value={o.value}>
-                {o.label}
-            </MenuItem>
-            ))}
-        </TextField>
+            <TypeAutocomplete types={types} value={filters.place_type} onChange={(v) => handleChange("place_type", v)} />
 
-        <Box sx={{ width: "100%", display: "flex", gap: 2 }}>
-            <Autocomplete
-            options={regions}
-            getOptionLabel={(opt) => opt.label}
-            value={regions.find((r) => r.value === filters.reg_code) || null}
-            onChange={(_, v) => handleChange("reg_code", v?.value || null)}
-            fullWidth
-            renderInput={(p) => <TextField {...p} label="Région" />}
-            clearOnEscape
+            <RegionDepartmentAutocomplete
+            regions={regions}
+            departments={departments}
+            selectedRegion={filters.reg_code}
+            selectedDepartment={filters.dep_code}
+            onChange={(field, val) => handleChange(field as keyof FilterValues, val)}
             />
 
-            <Autocomplete
-            options={departments}
-            getOptionLabel={(opt) => opt.label}
-            value={departments.find((d) => d.value === filters.dep_code) || null}
-            onChange={(_, v) => handleChange("dep_code", v?.value || null)}
-            fullWidth
-            renderInput={(p) => <TextField {...p} label="Département" />}
-            clearOnEscape
-            />
-        </Box>
-
-        <Box
-            sx={{
-            width: "100%",
-            display: "flex",
-            justifyContent: "space-between",
-            mt: 2,
-            }}
-        >
-            <Button variant="outlined" onClick={handleClear}>
-            Effacer les filtres
-            </Button>
-            <Button variant="contained" onClick={handleSubmit}>
-            Rechercher
-            </Button>
-        </Box>
+            <Box sx={{ display: "flex", justifyContent: "space-between", mt: 2 }}>
+            <Button variant="outlined" onClick={handleClear}>Effacer</Button>
+            <Button variant="contained" onClick={handleSubmit}>Rechercher</Button>
+            </Box>
         </Card>
+        </>
     );
 }
