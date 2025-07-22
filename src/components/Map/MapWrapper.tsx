@@ -7,6 +7,7 @@ import {
     Button,
     Card,
     IconButton,
+    AlertColor,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import { getSymbolIcon } from "@utils/markerColors";
@@ -19,12 +20,15 @@ import BuyMeACoffeeButton from "@components/UI/SearchBar/BuyMeACoffee";
 import { useMapHandlers } from "@hooks/useMapHandler";
 import type { Restaurant } from "@schemas/restaurant";
 import type { FilterValues } from "@schemas/filter";
+import Toast from "@components/UI/Toast/Toast";
 import {
     fetchFilteredRestaurants,
     fetchRestaurantDetail,
     fetchRestaurantDetailByName,
 } from "@services/restaurantService";
 import { MarkerClusterer } from "@googlemaps/markerclusterer";
+import { Option } from "@/types/search";
+import { usePlaceDetails } from "@/hooks/usePlaceDetails";
 
 const containerStyle = { width: "100%", height: "100vh" };
 const DEFAULT_CENTER = { lat: 46.603354, lng: 1.888334 };
@@ -39,6 +43,12 @@ export default function MapWrapper() {
     const [contactOpen, setContactOpen] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
 
+    const [toastOpen, setToastOpen] = useState(false);
+    const [toastMessage, setToastMessage] = useState("");
+    const [toastSeverity, setToastSeverity] = useState<AlertColor>("info");
+
+    const cityCoordCache = useRef<Map<string, { lat: number; lng: number }>>(new Map());
+
     const markersRef = useRef<google.maps.Marker[]>([]);
     const clustererRef = useRef<MarkerClusterer | null>(null);
     const detailCacheRef = useRef<Map<string, Restaurant>>(new Map());
@@ -52,6 +62,8 @@ export default function MapWrapper() {
         selectedRestaurant,
         setSelectedRestaurant,
     } = useMapHandlers();
+
+    const { getPlaceDetails } = usePlaceDetails();
 
     const key = process.env.REACT_APP_GOOGLE_MAPS_API_KEY!;
 
@@ -68,6 +80,12 @@ export default function MapWrapper() {
         );
     }, []);
 
+    const showToast = (msg: string, severity: AlertColor = "info") => {
+        setToastMessage(msg);
+        setToastSeverity(severity);
+        setToastOpen(true);
+    };
+
     const handleSelect = async (r: Restaurant) => {
         const cached = detailCacheRef.current.get(r.siret);
         if (cached) return setSelectedRestaurant(cached);
@@ -82,7 +100,7 @@ export default function MapWrapper() {
                 mapRef.current.setZoom(15);
             }
         } catch (e) {
-            console.error(e);
+            showToast("Aucun résultat trouvé pour ce restaurant.", "error");
         }
     };
 
@@ -97,18 +115,50 @@ export default function MapWrapper() {
         clearMarkers();
     };
 
-    const handleSearch = async (name: string, city: string) => {
+    const handleSearch = async (result: Option) => {
         try {
-            const r = await fetchRestaurantDetailByName(name, city);
-            setSelectedRestaurant(r);
-            if (mapRef.current) {
+            if (result.type === "restaurant") {
+                const r = await fetchRestaurantDetailByName(result.name, result.city);
+                setSelectedRestaurant(r);
+                if (mapRef.current) {
+                    clearMarkers();
+                    createNativeMarkers(mapRef.current, [r]);
+                    mapRef.current.panTo({ lat: r.lat, lng: r.lng });
+                    mapRef.current.setZoom(16);
+                }
+                return;
+            } else if (result.type === "city") {
+                setSelectedRestaurant(null);
                 clearMarkers();
-                createNativeMarkers(mapRef.current, [r]);
-                mapRef.current.panTo({ lat: r.lat, lng: r.lng });
-                mapRef.current.setZoom(16);
+
+                let lat: number, lng: number;
+                const cached = cityCoordCache.current.get(result.placeId!);
+                if (cached) {
+                    ({ lat, lng } = cached);
+                } else {
+                    const place = await getPlaceDetails(result.placeId!);
+                    const location = place?.geometry?.location;
+                    lat = location?.lat() ?? DEFAULT_CENTER.lat;
+                    lng = location?.lng() ?? DEFAULT_CENTER.lng;
+                    cityCoordCache.current.set(result.placeId!, { lat, lng });
+                }
+
+                setMapCenter({ lat, lng });
+                if (mapRef.current) {
+                    mapRef.current.panTo({ lat, lng });
+                    mapRef.current.setZoom(14);
+                }
+
+                const restaurants = await fetchFilteredRestaurants({ city: result.city });
+
+                if (restaurants.length && mapRef.current) {
+                    createNativeMarkers(mapRef.current, restaurants);
+                } else {
+                    showToast(`Aucun restaurant trouvé à ${result.city}.`, "warning");
+                }
             }
         } catch {
-            console.error("No match for", name, city);
+            showToast("Aucun résultat trouvé pour cette recherche.", "warning");
         }
     };
 
@@ -122,9 +172,11 @@ export default function MapWrapper() {
                 data.forEach((r) => bounds.extend({ lat: r.lat, lng: r.lng }));
                 mapRef.current.fitBounds(bounds);
                 createNativeMarkers(mapRef.current, data);
+            } else {
+                showToast("Aucun résultat trouvé avec ces filtres.", "warning");
             }
         } catch (e) {
-            console.error(e);
+            console.error("Error fetching filtered restaurants:", e);
         } finally {
             setSearching(false);
         }
@@ -271,6 +323,13 @@ export default function MapWrapper() {
                     isMobile={isMobile}
                 />
             )}
+
+            <Toast
+                open={toastOpen}
+                message={toastMessage}
+                severity={toastSeverity}
+                onClose={() => setToastOpen(false)}
+            />
 
             {(searching && isReady) && <OverlaySpinner />}
         </LoadScript>
