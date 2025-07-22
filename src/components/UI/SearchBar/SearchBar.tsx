@@ -1,56 +1,65 @@
-import { useEffect, useState, useMemo, useCallback } from "react";
+import { useEffect, useState, useRef } from "react";
 import { Autocomplete, Box, TextField } from "@mui/material";
 import debounce from "lodash.debounce";
 import { useAutocompleteService } from "@hooks/useAutoCompleteService";
-
-interface Props {
-    onSearch: (name: string, city: string) => void;
-}
-
-interface Option {
-    type: "google";
-    label: string;
-    placeId: string;
-    name: string;
-    city: string;
-}
+import { Props, Option } from "@/types/search";
+import { searchRestaurants } from "@/services/restaurantService";
+import { toTitleCase } from "@/utils/format";
 
 const SearchBar = ({ onSearch }: Props) => {
     const [inputValue, setInputValue] = useState("");
     const [options, setOptions] = useState<Option[]>([]);
     const { getPredictions } = useAutocompleteService();
 
-    const handleSearch = useCallback(async (value: string) => {
-        const googleResults = await getPredictions(value);
-        const formatted: Option[] = googleResults.map((p) => {
-            const [namePart, ...rest] = p.description.split(",");
-            return {
-                type: "google",
-                label: p.description,
-                placeId: p.place_id,
-                name: namePart.trim(),
-                city: rest.join(",").trim(),
-            };
-        });
-        setOptions(formatted);
-    }, [getPredictions]);
+    const debouncedSearchRef = useRef(
+        debounce(async (rawValue: string) => {
+            const value = rawValue.trim();
+            if (value.length < 2) return;
 
-    const debouncedSearch = useMemo(
-        () => debounce(handleSearch, 300),
-        [handleSearch]
+            const [googleResults, dbResults] = await Promise.all([
+                getPredictions(value),
+                searchRestaurants(value),
+            ]);
+
+            const formattedGoogle: Option[] = googleResults.slice(0, 2).map((p) => {
+                const [namePart] = p.description.split(",");
+                return {
+                    type: "city",
+                    label: `${p.description}`,
+                    placeId: p.place_id,
+                    name: namePart.trim(),
+                    city: namePart.trim(),
+                };
+            });
+
+            const formattedDB: Option[] = dbResults.map((r) => ({
+                type: "restaurant",
+                label: `${toTitleCase(r.name)} - ${toTitleCase(r.address)}, ${toTitleCase(r.city)}`,
+                name: r.name,
+                city: r.city,
+                address: r.address,
+                siret: r.siret,
+                lat: r.lat,
+                lng: r.lng,
+            }));
+
+            setOptions([...formattedGoogle, ...formattedDB]);
+        }, 400)
     );
 
     useEffect(() => {
-        if (inputValue.length >= 2) {
-            debouncedSearch(inputValue);
-        } else if (options.length > 0) {
+        const trimmed = inputValue.trim();
+
+        if (trimmed.length >= 2) {
+            debouncedSearchRef.current(trimmed);
+        } else {
             setOptions([]);
         }
 
         return () => {
-            debouncedSearch.cancel();
+            debouncedSearchRef.current.cancel();
         };
-    }, [inputValue, debouncedSearch, options.length]);
+    }, [inputValue]);
 
     return (
         <Box sx={{ width: "100%" }}>
@@ -65,14 +74,12 @@ const SearchBar = ({ onSearch }: Props) => {
                 onInputChange={(_, value) => setInputValue(value)}
                 onChange={(_, value) => {
                     if (!value || typeof value === "string") return;
-                    if (value.type === "google") {
-                        onSearch(value.name, value.city);
-                    }
+                    onSearch(value);
                 }}
                 renderInput={(params) => (
                     <TextField
                         {...params}
-                        label="Rechercher un restaurant ou une adresse"
+                        label="Rechercher un restaurant ou une ville"
                         variant="outlined"
                         fullWidth
                         InputProps={{
