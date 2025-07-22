@@ -56,8 +56,10 @@ const SearchBar = ({ onSearch }: Props) => {
             setOptions([]);
         }
 
+        const currentDebounce = debouncedSearchRef.current;
+
         return () => {
-            debouncedSearchRef.current.cancel();
+            currentDebounce.cancel();
         };
     }, [inputValue]);
 
