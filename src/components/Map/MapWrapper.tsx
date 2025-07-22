@@ -17,6 +17,7 @@ import OverlaySpinner from "@components/UI/Spinner/OverlaySpinner";
 import FilterBar from "@components/UI/SearchBar/FilterBar";
 import ContactModal from "@components/UI/SearchBar/ContactModal";
 import BuyMeACoffeeButton from "@components/UI/SearchBar/BuyMeACoffee";
+import AddToHomeScreenButton from "../UI/SearchBar/HomeScreenButton";
 import { useMapHandlers } from "@hooks/useMapHandler";
 import type { Restaurant } from "@schemas/restaurant";
 import type { FilterValues } from "@schemas/filter";
@@ -30,7 +31,7 @@ import { MarkerClusterer } from "@googlemaps/markerclusterer";
 import { Option } from "@/types/search";
 import { usePlaceDetails } from "@/hooks/usePlaceDetails";
 
-const containerStyle = { width: "100%", height: "100vh" };
+const containerStyle = { width: "100%", height: "100vh"};
 const DEFAULT_CENTER = { lat: 46.603354, lng: 1.888334 };
 const googleLibraries: ("places")[] = ["places"];
 
@@ -261,6 +262,7 @@ export default function MapWrapper() {
                         🎯 Filtres
                     </Button>
                     <BuyMeACoffeeButton fullWidth />
+                    <AddToHomeScreenButton fullWidth />
                     <Button variant="outlined" sx={{ bgcolor: "white" }} onClick={() => { setContactOpen(true); setMenuOpen(false); }}>
                         📬 Contact
                     </Button>
@@ -311,6 +313,23 @@ export default function MapWrapper() {
                         mapTypeControl: false,
                         streetViewControl: false,
                         fullscreenControl: false,
+                        styles: [
+                            {
+                                featureType: "all",
+                                elementType: "geometry",
+                                stylers: [{ visibility: "simplified" }],
+                            },
+                            {
+                                featureType: "poi",
+                                elementType: "labels",
+                                stylers: [{ visibility: "off" }],
+                            },
+                            {
+                                featureType: "road",
+                                elementType: "geometry",
+                                stylers: [{ visibility: "simplified" }],
+                            }
+                        ],
                     }}
                 />
             )}
