@@ -70,12 +70,47 @@ export default function MapWrapper() {
 
     useEffect(() => {
         navigator.geolocation.getCurrentPosition(
-            ({ coords }) => {
-                setMapCenter({ lat: Number(coords.latitude), lng: Number(coords.longitude) });
+            async ({ coords }) => {
+                const lat = Number(coords.latitude);
+                const lng = Number(coords.longitude);
+
+                setMapCenter({ lat, lng });
+                setCurrentZoom(11);
                 setIsReady(true);
+
+                const geocoder = new window.google.maps.Geocoder();
+                geocoder.geocode({ location: { lat, lng } }, async (results, status) => {
+                    if (status === "OK" && results) {
+                        const postalCodeComponent = results
+                            .flatMap((r) => r.address_components)
+                            .find((c) => c.types.includes("postal_code"));
+
+                        const postalCode = postalCodeComponent?.long_name;
+
+                        if (postalCode) {
+                            let depCode = postalCode.substring(0, 2);
+
+                            if (depCode === "20") {
+                                depCode = "2A";
+                            }
+
+                            try {
+                                const restaurants = await fetchFilteredRestaurants({ dep_code: depCode });
+                                if (restaurants.length && mapRef.current) {
+                                    createNativeMarkers(mapRef.current, restaurants);
+                                } else {
+                                    showToast(`Aucun restaurant trouvé dans le département ${depCode}.`, "warning");
+                                }
+                            } catch {
+                                showToast("Erreur lors du chargement des restaurants à proximité.", "error");
+                            }
+                        }
+                    }
+                });
             },
             () => {
                 setMapCenter(DEFAULT_CENTER);
+                setCurrentZoom(6);
                 setIsReady(true);
             }
         );
@@ -305,7 +340,7 @@ export default function MapWrapper() {
                 <GoogleMap
                     mapContainerStyle={containerStyle}
                     center={mapCenter}
-                    zoom={6}
+                    zoom={currentZoom}
                     onLoad={onMapLoad}
                     options={{
                         disableDefaultUI: true,
