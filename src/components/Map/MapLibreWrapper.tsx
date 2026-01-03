@@ -11,7 +11,6 @@ import {
     AlertColor,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
-import { LoadScript } from "@react-google-maps/api";
 import { getSymbolIcon } from "@utils/markerColors";
 import RestaurantCard from "@components/UI/Card/RestaurantCard";
 import SearchBar from "@components/UI/SearchBar/SearchBar";
@@ -35,7 +34,25 @@ import { usePlaceDetails } from "@/hooks/usePlaceDetails";
 
 const containerStyle = { width: "100%", height: "100vh" };
 const DEFAULT_CENTER = { lat: 46.603354, lng: 1.888334 };
-const googleLibraries: ("places")[] = ["places"];
+
+const defaultRasterStyle: maplibregl.StyleSpecification = {
+    version: 8,
+    sources: {
+        osm: {
+            type: "raster",
+            tiles: ["https://tile.openstreetmap.org/{z}/{x}/{y}.png"],
+            tileSize: 256,
+            attribution: "© OpenStreetMap contributors",
+        },
+    },
+    layers: [
+        {
+            id: "osm-tiles",
+            type: "raster",
+            source: "osm",
+        },
+    ],
+};
 
 export default function MapLibreWrapper() {
     const [isReady, setIsReady] = useState(false);
@@ -62,10 +79,7 @@ export default function MapLibreWrapper() {
 
     const { getPlaceDetails } = usePlaceDetails();
 
-    const key = process.env.REACT_APP_GOOGLE_MAPS_API_KEY!;
-    const styleUrl =
-        process.env.REACT_APP_MAPLIBRE_STYLE_URL ??
-        "https://demotiles.maplibre.org/style.json";
+    const styleUrl = process.env.REACT_APP_MAPLIBRE_STYLE_URL;
 
     const showToast = (msg: string, severity: AlertColor = "info") => {
         setToastMessage(msg);
@@ -142,10 +156,23 @@ export default function MapLibreWrapper() {
 
         const map = new maplibregl.Map({
             container: mapContainerRef.current,
-            style: styleUrl,
+            style: styleUrl ?? defaultRasterStyle,
             center: [DEFAULT_CENTER.lng, DEFAULT_CENTER.lat],
             zoom: 6,
             attributionControl: false,
+        });
+
+        map.on("load", () => {
+            setIsReady(true);
+        });
+
+        map.on("error", (e) => {
+            const msg = (e as any)?.error?.message;
+            if (msg) {
+                showToast(`Erreur carte: ${msg}`, "warning");
+            } else {
+                showToast("Erreur carte: ressource bloquée ou indisponible.", "warning");
+            }
         });
 
         map.dragRotate.disable();
@@ -317,7 +344,7 @@ export default function MapLibreWrapper() {
     };
 
     return (
-        <LoadScript googleMapsApiKey={key} libraries={googleLibraries}>
+        <>
             <Box
                 sx={{
                     position: "absolute",
@@ -426,7 +453,7 @@ export default function MapLibreWrapper() {
                 sx={{
                     width: containerStyle.width,
                     height: containerStyle.height,
-                    visibility: isReady ? "visible" : "hidden",
+                    visibility: "visible",
                 }}
             />
 
@@ -449,6 +476,6 @@ export default function MapLibreWrapper() {
             {searching && isReady && <OverlaySpinner />}
 
             <RecommendationChat initialLatLng={mapCenter} onResults={handleRecommendationResults} limit={10} />
-        </LoadScript>
+        </>
     );
 }
