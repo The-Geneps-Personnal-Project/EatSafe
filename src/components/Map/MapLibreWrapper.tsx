@@ -84,6 +84,25 @@ export default function MapLibreWrapper() {
     const CLUSTER_COUNT_LAYER_ID = "restaurant-cluster-count";
     const UNCLUSTERED_LAYER_ID = "restaurant-unclustered";
 
+    const hidePoiLayers = (map: maplibregl.Map) => {
+        const style = map.getStyle();
+        const layers = style?.layers ?? [];
+        if (!layers.length) return;
+
+        // Best-effort: hide POI/places layers in common vector styles.
+        // Note: this cannot affect raster tiles (OSM raster has labels baked in).
+        const poiRegex = /(poi|place|amenity|food|restaurant|cafe|bar|fast[_-]?food)/i;
+
+        for (const layer of layers) {
+            if (!poiRegex.test(layer.id)) continue;
+            try {
+                map.setLayoutProperty(layer.id, "visibility", "none");
+            } catch {
+                // ignore layers that don't support layout visibility
+            }
+        }
+    };
+
     const showToast = (msg: string, severity: AlertColor = "info") => {
         setToastMessage(msg);
         setToastSeverity(severity);
@@ -152,7 +171,7 @@ export default function MapLibreWrapper() {
                     "green",
                     "blue",
                 ],
-                "circle-radius": 7,
+                "circle-radius": 9,
                 "circle-stroke-width": 2,
                 "circle-stroke-color": "rgba(255,255,255,0.9)",
             },
@@ -277,6 +296,7 @@ export default function MapLibreWrapper() {
 
         map.on("load", () => {
             ensureRestaurantLayers(map);
+            hidePoiLayers(map);
             setIsReady(true);
         });
 
