@@ -22,6 +22,8 @@ import { useMapHandlers } from "@hooks/useMapHandler";
 import type { Restaurant } from "@schemas/restaurant";
 import type { FilterValues } from "@schemas/filter";
 import Toast from "@components/UI/Toast/Toast";
+import { Recommendation } from "@schemas/recommendation";
+import RecommendationChat from "@components/recommendation/RecommendationChat";
 import {
     fetchFilteredRestaurants,
     fetchRestaurantDetail,
@@ -138,6 +140,37 @@ export default function MapWrapper() {
         } catch (e) {
             showToast("Aucun résultat trouvé pour ce restaurant.", "error");
         }
+    };
+
+    const handleRecommendationResults = (recs: Recommendation[]) => {
+        if (!mapRef.current || !Array.isArray(recs) || !recs.length) return;
+
+        const toNum = (v: any) => (v === null || v === undefined ? NaN : Number(v));
+        const restaurants = recs
+            .map((r) => {
+                const lat = toNum((r as any).latitude ?? (r as any).lat);
+                const lng = toNum((r as any).longitude ?? (r as any).lng);
+                return {
+                    siret: (r as any).siret ?? (r as any).id ?? String(Math.random()),
+                    name: r.name,
+                    lat,
+                    lng,
+                    sanitary_score: toNum((r as any).hygiene_score ?? (r as any).local_score),
+                };
+            })
+            .filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lng));
+
+        if (!restaurants.length) {
+            showToast("Aucune coordonnée valide reçue des recommandations.", "warning");
+            return;
+        }
+
+        const bounds = new google.maps.LatLngBounds();
+        restaurants.forEach((r) => bounds.extend({ lat: r.lat, lng: r.lng }));
+
+        clearMarkers();
+        createNativeMarkers(mapRef.current, restaurants as any);
+        mapRef.current.fitBounds(bounds);
     };
 
     const clearMarkers = () => {
@@ -386,6 +419,12 @@ export default function MapWrapper() {
             />
 
             {(searching && isReady) && <OverlaySpinner />}
+
+            <RecommendationChat
+                initialLatLng={mapCenter}
+                onResults={handleRecommendationResults}
+                limit={10}
+            />
         </LoadScript>
     );
 }
