@@ -5,15 +5,15 @@ export default function ResultsList({ results }: { results: Recommendation[] }) 
     return (
         <List dense disablePadding>
             {results.map((r) => (
-                <ListItem key={r.siret ?? r.name} disableGutters sx={{ alignItems: "flex-start" }}>
+                <ListItem key={r.id} disableGutters sx={{ alignItems: "flex-start" }}>
                     <ListItemText
                         primary={
                             <Box sx={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 1 }}>
                                 <Typography variant="body1" fontWeight={600}>{r.name}</Typography>
                                 <Chip
                                     size="small"
-                                    label={mapLocalScore((r as any).hygiene_score ?? (r as any).local_score)}
-                                    color={chipColorFromScore((r as any).hygiene_score ?? (r as any).local_score)}
+                                    label={mapLocalScore(r.local_score)}
+                                    color={chipColorFromScore(r.local_score)}
                                     variant="filled"
                                 />
                             </Box>
@@ -21,12 +21,14 @@ export default function ResultsList({ results }: { results: Recommendation[] }) 
                         secondary={
                             <Box sx={{ mt: 0.5, display: "flex", flexDirection: "column", gap: 0.5 }}>
                                 <Typography variant="caption" color="text.secondary">
-                                    {r.distance_km != null ? `À ${Math.round(Number(r.distance_km) * 1000)} m` : ""} · {r.rating ? `${Number(r.rating).toFixed(1)} ★` : "Pas d'avis"}
+                                    {`À ${Math.round(Number(r.distance_m))} m`} · {r.google_rating ? `${Number(r.google_rating).toFixed(1)} ★` : "Pas d'avis"}
                                 </Typography>
                                 <Box sx={{ display: "flex", flexWrap: "wrap", gap: 0.5 }}>
-                                    {(r as any).match_reason ? ((r as any).match_reason as string).split("|").slice(0, 3).map((reason, i) => (
-                                        <Chip key={i} size="small" label={reason.trim()} variant="outlined" />
-                                    )) : null}
+                                    {Array.isArray(r.reason)
+                                        ? r.reason.slice(0, 3).map((reason, i) => (
+                                            <Chip key={i} size="small" label={reason.trim()} variant="outlined" />
+                                        ))
+                                        : null}
                                 </Box>
                             </Box>
                         }
