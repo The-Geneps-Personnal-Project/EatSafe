@@ -11,7 +11,6 @@ import {
     AlertColor,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
-import { getSymbolIcon } from "@utils/markerColors";
 import RestaurantCard from "@components/UI/Card/RestaurantCard";
 import SearchBar from "@components/UI/SearchBar/SearchBar";
 import OverlaySpinner from "@components/UI/Spinner/OverlaySpinner";
@@ -57,7 +56,6 @@ const defaultRasterStyle: maplibregl.StyleSpecification = {
 export default function MapLibreWrapper() {
     const [isReady, setIsReady] = useState(false);
     const [mapCenter, setMapCenter] = useState(DEFAULT_CENTER);
-    const [currentZoom, setCurrentZoom] = useState(6);
     const [searching, setSearching] = useState(false);
     const [filtersOpen, setFiltersOpen] = useState(false);
     const [contactOpen, setContactOpen] = useState(false);
@@ -68,8 +66,8 @@ export default function MapLibreWrapper() {
     const [toastSeverity, setToastSeverity] = useState<AlertColor>("info");
 
     const cityCoordCache = useRef<Map<string, { lat: number; lng: number }>>(new Map());
-    const markersRef = useRef<maplibregl.Marker[]>([]);
     const detailCacheRef = useRef<Map<string, Restaurant>>(new Map());
+    const restaurantsBySiretRef = useRef<Map<string, Restaurant>>(new Map());
 
     const mapContainerRef = useRef<HTMLDivElement | null>(null);
     const mapRef = useRef<maplibregl.Map | null>(null);
@@ -81,40 +79,155 @@ export default function MapLibreWrapper() {
 
     const styleUrl = process.env.REACT_APP_MAPLIBRE_STYLE_URL;
 
+    const RESTAURANTS_SOURCE_ID = "restaurants";
+    const CLUSTERS_LAYER_ID = "restaurant-clusters";
+    const CLUSTER_COUNT_LAYER_ID = "restaurant-cluster-count";
+    const UNCLUSTERED_LAYER_ID = "restaurant-unclustered";
+
     const showToast = (msg: string, severity: AlertColor = "info") => {
         setToastMessage(msg);
         setToastSeverity(severity);
         setToastOpen(true);
     };
 
-    const clearMarkers = () => {
-        markersRef.current.forEach((m) => m.remove());
-        markersRef.current = [];
-    };
+    const ensureRestaurantLayers = (map: maplibregl.Map) => {
+        if (map.getSource(RESTAURANTS_SOURCE_ID)) return;
 
-    const createMarkers = (map: maplibregl.Map, restaurants: Restaurant[]) => {
-        clearMarkers();
-        const markers = restaurants.map((r) => {
-            const el = document.createElement("div");
-            el.style.width = "32px";
-            el.style.height = "32px";
-            el.style.cursor = "pointer";
+        map.addSource(RESTAURANTS_SOURCE_ID, {
+            type: "geojson",
+            data: { type: "FeatureCollection", features: [] },
+            cluster: true,
+            clusterRadius: 50,
+            clusterMaxZoom: 14,
+        } as any);
 
-            const img = document.createElement("img");
-            img.src = getSymbolIcon(r.sanitary_score);
-            img.style.width = "100%";
-            img.style.height = "100%";
-            img.style.display = "block";
-            el.appendChild(img);
-
-            el.addEventListener("click", () => handleSelect(r));
-
-            return new maplibregl.Marker({ element: el, anchor: "bottom" })
-                .setLngLat([r.lng, r.lat])
-                .addTo(map);
+        map.addLayer({
+            id: CLUSTERS_LAYER_ID,
+            type: "circle",
+            source: RESTAURANTS_SOURCE_ID,
+            filter: ["has", "point_count"],
+            paint: {
+                "circle-color": "rgba(0,0,0,0.55)",
+                "circle-radius": [
+                    "step",
+                    ["get", "point_count"],
+                    16,
+                    50,
+                    22,
+                    200,
+                    28,
+                ],
+                "circle-stroke-width": 2,
+                "circle-stroke-color": "rgba(255,255,255,0.85)",
+            },
         });
 
-        markersRef.current = markers;
+        map.addLayer({
+            id: CLUSTER_COUNT_LAYER_ID,
+            type: "symbol",
+            source: RESTAURANTS_SOURCE_ID,
+            filter: ["has", "point_count"],
+            layout: {
+                "text-field": ["get", "point_count_abbreviated"],
+                "text-size": 12,
+            },
+            paint: {
+                "text-color": "rgba(255,255,255,0.95)",
+            },
+        });
+
+        map.addLayer({
+            id: UNCLUSTERED_LAYER_ID,
+            type: "circle",
+            source: RESTAURANTS_SOURCE_ID,
+            filter: ["!", ["has", "point_count"]],
+            paint: {
+                "circle-color": [
+                    "case",
+                    ["==", ["get", "sanitary_score"], 4],
+                    "red",
+                    ["==", ["get", "sanitary_score"], 3],
+                    "orange",
+                    ["==", ["get", "sanitary_score"], 2],
+                    "green",
+                    "blue",
+                ],
+                "circle-radius": 7,
+                "circle-stroke-width": 2,
+                "circle-stroke-color": "rgba(255,255,255,0.9)",
+            },
+        });
+
+        map.on("click", CLUSTERS_LAYER_ID, (e) => {
+            const features = map.queryRenderedFeatures(e.point, { layers: [CLUSTERS_LAYER_ID] });
+            const feature = features[0];
+            if (!feature) return;
+
+            const clusterIdRaw = (feature.properties as any)?.cluster_id;
+            const source = map.getSource(RESTAURANTS_SOURCE_ID) as maplibregl.GeoJSONSource;
+            const clusterId = Number(clusterIdRaw);
+            if (!source || !Number.isFinite(clusterId)) return;
+
+            void source.getClusterExpansionZoom(clusterId).then((zoom) => {
+                const coords = (feature.geometry as any)?.coordinates as [number, number] | undefined;
+                if (!coords) return;
+                map.easeTo({ center: coords, zoom, duration: 300 });
+            });
+        });
+
+        map.on("click", UNCLUSTERED_LAYER_ID, (e) => {
+            const feature = e.features?.[0];
+            const siret = (feature?.properties as any)?.siret as string | undefined;
+            if (!siret) return;
+            const r = restaurantsBySiretRef.current.get(siret);
+            if (r) void handleSelect(r);
+        });
+
+        map.on("mouseenter", CLUSTERS_LAYER_ID, () => {
+            map.getCanvas().style.cursor = "pointer";
+        });
+        map.on("mouseleave", CLUSTERS_LAYER_ID, () => {
+            map.getCanvas().style.cursor = "";
+        });
+        map.on("mouseenter", UNCLUSTERED_LAYER_ID, () => {
+            map.getCanvas().style.cursor = "pointer";
+        });
+        map.on("mouseleave", UNCLUSTERED_LAYER_ID, () => {
+            map.getCanvas().style.cursor = "";
+        });
+    };
+
+    const setRestaurantsOnMap = (restaurants: Restaurant[]) => {
+        if (!mapRef.current) return;
+        ensureRestaurantLayers(mapRef.current);
+
+        restaurantsBySiretRef.current = new Map(restaurants.map((r) => [r.siret, r]));
+
+        const featureCollection: GeoJSON.FeatureCollection<GeoJSON.Point> = {
+            type: "FeatureCollection",
+            features: restaurants
+                .filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lng))
+                .map((r) => ({
+                    type: "Feature",
+                    geometry: { type: "Point", coordinates: [r.lng, r.lat] },
+                    properties: {
+                        siret: r.siret,
+                        name: r.name,
+                        sanitary_score: Number(r.sanitary_score),
+                    },
+                })),
+        };
+
+        const source = mapRef.current.getSource(RESTAURANTS_SOURCE_ID) as maplibregl.GeoJSONSource;
+        source.setData(featureCollection);
+    };
+
+    const clearMarkers = () => {
+        restaurantsBySiretRef.current.clear();
+        if (!mapRef.current) return;
+        if (!mapRef.current.getSource(RESTAURANTS_SOURCE_ID)) return;
+        const source = mapRef.current.getSource(RESTAURANTS_SOURCE_ID) as maplibregl.GeoJSONSource;
+        source.setData({ type: "FeatureCollection", features: [] });
     };
 
     const fitBoundsToRestaurants = (restaurants: { lat: number; lng: number }[]) => {
@@ -163,6 +276,7 @@ export default function MapLibreWrapper() {
         });
 
         map.on("load", () => {
+            ensureRestaurantLayers(map);
             setIsReady(true);
         });
 
@@ -177,8 +291,6 @@ export default function MapLibreWrapper() {
 
         map.dragRotate.disable();
         map.touchZoomRotate.disableRotation();
-
-        map.on("zoomend", () => setCurrentZoom(map.getZoom()));
 
         mapRef.current = map;
 
@@ -197,7 +309,6 @@ export default function MapLibreWrapper() {
                 const lng = Number(coords.longitude);
 
                 setMapCenter({ lat, lng });
-                setCurrentZoom(11);
                 setIsReady(true);
 
                 if (mapRef.current) {
@@ -226,7 +337,7 @@ export default function MapLibreWrapper() {
                             try {
                                 const restaurants = await fetchFilteredRestaurants({ dep_code: depCode });
                                 if (restaurants.length && mapRef.current) {
-                                    createMarkers(mapRef.current, restaurants);
+                                    setRestaurantsOnMap(restaurants);
                                     fitBoundsToRestaurants(restaurants);
                                 } else {
                                     showToast(`Aucun restaurant trouvé dans le département ${depCode}.`, "warning");
@@ -240,7 +351,6 @@ export default function MapLibreWrapper() {
             },
             () => {
                 setMapCenter(DEFAULT_CENTER);
-                setCurrentZoom(6);
                 setIsReady(true);
             }
         );
@@ -271,7 +381,7 @@ export default function MapLibreWrapper() {
         }
 
         clearMarkers();
-        createMarkers(mapRef.current, restaurants as any);
+        setRestaurantsOnMap(restaurants as any);
         fitBoundsToRestaurants(restaurants);
     };
 
@@ -286,7 +396,7 @@ export default function MapLibreWrapper() {
                 setSelectedRestaurant(r);
                 if (mapRef.current) {
                     clearMarkers();
-                    createMarkers(mapRef.current, [r]);
+                    setRestaurantsOnMap([r]);
                     mapRef.current.easeTo({ center: [r.lng, r.lat], zoom: 16, duration: 400 });
                 }
                 return;
@@ -314,7 +424,7 @@ export default function MapLibreWrapper() {
                 const restaurants = await fetchFilteredRestaurants({ city: result.city });
 
                 if (restaurants.length && mapRef.current) {
-                    createMarkers(mapRef.current, restaurants);
+                    setRestaurantsOnMap(restaurants);
                     fitBoundsToRestaurants(restaurants);
                 } else {
                     showToast(`Aucun restaurant trouvé à ${result.city}.`, "warning");
@@ -331,7 +441,7 @@ export default function MapLibreWrapper() {
             const data = await fetchFilteredRestaurants(filters);
             setFiltersOpen(false);
             if (mapRef.current && data.length) {
-                createMarkers(mapRef.current, data);
+                setRestaurantsOnMap(data);
                 fitBoundsToRestaurants(data);
             } else {
                 showToast("Aucun résultat trouvé avec ces filtres.", "warning");
