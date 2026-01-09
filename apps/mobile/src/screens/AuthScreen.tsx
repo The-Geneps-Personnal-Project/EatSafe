@@ -1,10 +1,11 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Alert, Button, StyleSheet, Text, TextInput, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import type { RootStackParamList } from "../navigation/types";
 import { useAuth } from "../auth/authState";
 import { toErrorMessage } from "../utils/errors";
+import { captureError, trackEvent } from "../telemetry/telemetry";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Auth">;
 
@@ -15,7 +16,12 @@ export default function AuthScreen({ navigation, route }: Props) {
 
     const { login, signup, firebaseEnabled, firebaseDisabledReason } = useAuth();
 
+    useEffect(() => {
+        trackEvent({ name: "screen_view", props: { screen: "Auth", mode } });
+    }, [mode]);
+
     const onSubmit = async () => {
+        trackEvent({ name: "auth_submit", props: { mode } });
         if (!firebaseEnabled) {
             Alert.alert("Configuration", firebaseDisabledReason ?? "Firebase n’est pas configuré.");
             return;
@@ -33,8 +39,12 @@ export default function AuthScreen({ navigation, route }: Props) {
             } else {
                 await login(e, password);
             }
+
+            trackEvent({ name: "auth_success", props: { mode } });
             navigation.goBack();
         } catch (err) {
+            captureError(err, { where: "AuthScreen.onSubmit", mode });
+            trackEvent({ name: "auth_failed", props: { mode } });
             Alert.alert("Erreur", toErrorMessage(err));
         }
     };

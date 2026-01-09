@@ -12,6 +12,7 @@ import { searchCities } from "../services/geoService";
 import { registerForPushNotifications, sendPushTokenToBackend } from "../services/notificationsService";
 import { upsertMinimal } from "../storage/restaurantCache";
 import { getPushEnabled, setPushEnabled as persistPushEnabled } from "../features/notifications/pushPrefs";
+import { captureError, trackEvent } from "../telemetry/telemetry";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
 
@@ -32,7 +33,13 @@ export default function MapScreen({ navigation }: Props) {
     useLayoutEffect(() => {
         navigation.setOptions({
             headerRight: () => (
-                <Pressable onPress={() => navigation.navigate("Bookmarks")} style={styles.headerBtn}>
+                <Pressable
+                    onPress={() => {
+                        trackEvent({ name: "nav_open", props: { to: "Bookmarks", from: "Map" } });
+                        navigation.navigate("Bookmarks");
+                    }}
+                    style={styles.headerBtn}
+                >
                     <Text style={styles.headerBtnText}>Favoris</Text>
                 </Pressable>
             )
@@ -49,6 +56,7 @@ export default function MapScreen({ navigation }: Props) {
     const [pushEnabled, setPushEnabled] = useState(false);
 
     useEffect(() => {
+        trackEvent({ name: "screen_view", props: { screen: "Map" } });
         void (async () => {
             try {
                 const saved = await getPushEnabled();
@@ -62,6 +70,8 @@ export default function MapScreen({ navigation }: Props) {
     const togglePush = async (next: boolean) => {
         setPushEnabled(next);
         void persistPushEnabled(next);
+
+        trackEvent({ name: "push_toggle", props: { enabled: next } });
         if (!next) return;
 
         try {
@@ -69,13 +79,16 @@ export default function MapScreen({ navigation }: Props) {
             if (!token) {
                 setPushEnabled(false);
                 void persistPushEnabled(false);
+                trackEvent({ name: "push_register_failed", props: { reason: "no_token" } });
                 Alert.alert("Notifications", "Indisponible (permissions refusées ou simulateur). Essaye sur un téléphone.");
                 return;
             }
             await sendPushTokenToBackend(token);
+            trackEvent({ name: "push_register_success" });
         } catch {
             setPushEnabled(false);
             void persistPushEnabled(false);
+            trackEvent({ name: "push_register_failed", props: { reason: "exception" } });
             Alert.alert("Notifications", "Impossible d'activer les notifications pour le moment.");
         }
     };
@@ -83,6 +96,7 @@ export default function MapScreen({ navigation }: Props) {
     useEffect(() => {
         void (async () => {
             const { status } = await Location.requestForegroundPermissionsAsync();
+            trackEvent({ name: "location_permission", props: { status } });
             if (status !== "granted") return;
 
             const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
@@ -110,6 +124,8 @@ export default function MapScreen({ navigation }: Props) {
         try {
             setCitySearchUnavailable(false);
 
+            trackEvent({ name: "search_run", props: { q_len: q.length } });
+
             const [dbRestaurants, citiesResult] = await Promise.all([
                 searchRestaurants(q),
                 searchCities(q).then(
@@ -120,6 +136,10 @@ export default function MapScreen({ navigation }: Props) {
 
             if (!citiesResult.ok) setCitySearchUnavailable(true);
             const cities = citiesResult.cities;
+
+            if (!citiesResult.ok) {
+                trackEvent({ name: "city_search_failed" });
+            }
 
             const cityItems: SearchItem[] = cities.slice(0, 3).map((c) => ({
                 kind: "city" as const,
@@ -134,8 +154,18 @@ export default function MapScreen({ navigation }: Props) {
             ];
 
             setResults(items);
+            trackEvent({
+                name: "search_results",
+                props: {
+                    restaurants: dbRestaurants.length,
+                    cities: cities.length,
+                    city_api_ok: citiesResult.ok
+                }
+            });
         } catch (e: any) {
             // Keep previous results on transient errors.
+            captureError(e, { where: "MapScreen.runSearch" });
+            trackEvent({ name: "search_failed" });
         } finally {
             setLoading(false);
         }
@@ -148,9 +178,11 @@ export default function MapScreen({ navigation }: Props) {
         return () => debounced.cancel();
     }, [query, debounced]);
 
-    const selectRestaurant = async (r: Restaurant) => {
+    const selectRestaurant = async (r: Restaurant, source: "search" | "marker") => {
         await upsertMinimal(r);
         setRestaurants([r]);
+
+        trackEvent({ name: "restaurant_open", props: { source } });
 
         const next: Region = {
             latitude: r.lat,
@@ -165,6 +197,7 @@ export default function MapScreen({ navigation }: Props) {
     };
 
     const selectCity = async (city: string, lat: number, lng: number) => {
+        trackEvent({ name: "city_select", props: { source: "search" } });
         const next: Region = {
             latitude: lat,
             longitude: lng,
@@ -178,7 +211,9 @@ export default function MapScreen({ navigation }: Props) {
         try {
             const data = await fetchRestaurantsByCity(city);
             setRestaurants(data);
+            trackEvent({ name: "city_results", props: { count: data.length } });
         } catch {
+            trackEvent({ name: "city_results_failed" });
             Alert.alert("Erreur", "Impossible de charger les restaurants pour cette ville.");
         } finally {
             setLoading(false);
@@ -202,7 +237,7 @@ export default function MapScreen({ navigation }: Props) {
                         coordinate={{ latitude: r.lat, longitude: r.lng }}
                         title={r.name}
                         description={`${r.address}, ${r.city}`}
-                        onPress={() => void selectRestaurant(r)}
+                        onPress={() => void selectRestaurant(r, "marker")}
                     />
                 ))}
             </MapView>
@@ -235,7 +270,7 @@ export default function MapScreen({ navigation }: Props) {
                                 if (item.kind === "restaurant") {
                                     const r = item.restaurant;
                                     return (
-                                        <Pressable onPress={() => void selectRestaurant(r)} style={styles.row}>
+                                        <Pressable onPress={() => void selectRestaurant(r, "search")} style={styles.row}>
                                             <Text style={styles.rowTitle}>{r.name}</Text>
                                             <Text style={styles.rowSub}>{r.address}, {r.city}</Text>
                                         </Pressable>

@@ -13,6 +13,7 @@ import { isVisited, setVisited } from "../storage/visited";
 import { buildShareUrl, ensurePublicIdForSiret } from "../services/shareService";
 import { shareLink } from "../utils/share";
 import { toErrorMessage } from "../utils/errors";
+import { captureError, trackEvent } from "../telemetry/telemetry";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Restaurant">;
 
@@ -47,6 +48,7 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                 <TouchableOpacity
                     onPress={() => {
                         void (async () => {
+                            trackEvent({ name: "restaurant_share_tap" });
                             if (!siret && !publicId) {
                                 Alert.alert("Partager", "Restaurant non partageable.");
                                 return;
@@ -56,7 +58,10 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                                 const pid = publicId ?? (await ensurePublicIdForSiret(siret!));
                                 const url = buildShareUrl(pid);
                                 await shareLink(url, title);
+                                trackEvent({ name: "restaurant_share_success" });
                             } catch (e) {
+                                captureError(e, { where: "RestaurantScreen.share" });
+                                trackEvent({ name: "restaurant_share_failed" });
                                 Alert.alert("Partager", toErrorMessage(e));
                             }
                         })();
@@ -74,6 +79,10 @@ export default function RestaurantScreen({ navigation, route }: Props) {
         navigation.setOptions({ title });
     }, [navigation, title]);
 
+    useEffect(() => {
+        trackEvent({ name: "screen_view", props: { screen: "Restaurant" } });
+    }, []);
+
     const load = async () => {
         setLoading(true);
         setLoadError(null);
@@ -86,6 +95,8 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                 setBookmarkedState(await isBookmarked(r.siret));
                 setVisitedState(await isVisited(r.siret));
                 setMinimalOffline(null);
+
+                trackEvent({ name: "restaurant_load_success", props: { by: "publicId" } });
                 return;
             }
 
@@ -101,6 +112,7 @@ export default function RestaurantScreen({ navigation, route }: Props) {
             if (cached) {
                 setRestaurant(cached);
                 setMinimalOffline(null);
+                trackEvent({ name: "restaurant_load_success", props: { by: "cache" } });
                 return;
             }
 
@@ -109,6 +121,7 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                 setRestaurant(r);
                 setMinimalOffline(null);
                 await upsertMinimal(r);
+                trackEvent({ name: "restaurant_load_success", props: { by: "siret" } });
             } catch (e) {
                 const minimal = await loadCachedMinimalBySiret(siret);
                 if (minimal) {
@@ -120,13 +133,19 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                         city: minimal.city,
                         sanitary_score: minimal.sanitary_score,
                     });
+
+                    trackEvent({ name: "restaurant_load_partial_offline", props: { by: "cached_minimal" } });
                 } else {
+                    captureError(e, { where: "RestaurantScreen.load" });
+                    trackEvent({ name: "restaurant_load_failed", props: { by: "siret" } });
                     setLoadError(toErrorMessage(e));
                 }
             }
         } catch (e: any) {
             const msg = toErrorMessage(e);
             setLoadError(msg);
+            captureError(e, { where: "RestaurantScreen.load.outer" });
+            trackEvent({ name: "restaurant_load_failed", props: { by: publicId ? "publicId" : (siret ? "siret" : "none") } });
             Alert.alert("Erreur", msg);
         } finally {
             setLoading(false);
@@ -187,6 +206,7 @@ export default function RestaurantScreen({ navigation, route }: Props) {
 
     const toggleBookmark = async () => {
         if (isGuest) {
+            trackEvent({ name: "guest_blocked_action", props: { action: "bookmark" } });
             navigation.navigate("Auth");
             return;
         }
@@ -195,6 +215,8 @@ export default function RestaurantScreen({ navigation, route }: Props) {
         const next = !bookmarked;
         await setBookmarked(activeSiret, next);
         setBookmarkedState(next);
+
+        trackEvent({ name: "bookmark_toggle", props: { enabled: next } });
 
         if (next) {
             // Ensure we persist full details for offline if possible.
@@ -205,12 +227,14 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                 await upsertFullForBookmark(r, true);
             } catch {
                 // If offline, we keep the bookmark flag and will fill details later.
+                trackEvent({ name: "bookmark_fill_failed" });
             }
         }
     };
 
     const toggleVisited = async () => {
         if (isGuest) {
+            trackEvent({ name: "guest_blocked_action", props: { action: "visited" } });
             navigation.navigate("Auth");
             return;
         }
@@ -218,6 +242,8 @@ export default function RestaurantScreen({ navigation, route }: Props) {
         const next = !visited;
         await setVisited(activeSiret, next);
         setVisitedState(next);
+
+        trackEvent({ name: "visited_toggle", props: { enabled: next } });
     };
 
     return (

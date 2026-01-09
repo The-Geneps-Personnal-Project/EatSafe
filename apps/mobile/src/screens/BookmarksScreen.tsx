@@ -5,6 +5,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { useAuth } from "../auth/authState";
 import { listBookmarkedRestaurants, type BookmarkedRow } from "../storage/bookmarksQuery";
+import { captureError, trackEvent } from "../telemetry/telemetry";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Bookmarks">;
 
@@ -13,11 +14,24 @@ export default function BookmarksScreen({ navigation }: Props) {
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<BookmarkedRow[]>([]);
 
+  useEffect(() => {
+    trackEvent({ name: "screen_view", props: { screen: "Bookmarks" } });
+  }, []);
+
+  useEffect(() => {
+    if (!isGuest) return;
+    trackEvent({ name: "guest_blocked_view", props: { screen: "Bookmarks" } });
+  }, [isGuest]);
+
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const rows = await listBookmarkedRestaurants();
       setItems(rows);
+      trackEvent({ name: "bookmarks_loaded", props: { count: rows.length } });
+    } catch (e) {
+      captureError(e, { where: "BookmarksScreen.refresh" });
+      trackEvent({ name: "bookmarks_load_failed" });
     } finally {
       setLoading(false);
     }
@@ -35,7 +49,13 @@ export default function BookmarksScreen({ navigation }: Props) {
           Connecte-toi pour accéder à tes favoris.
         </Text>
         <View style={{ height: 12 }} />
-        <Button title="Se connecter" onPress={() => navigation.navigate("Auth")} />
+        <Button
+          title="Se connecter"
+          onPress={() => {
+            trackEvent({ name: "nav_open", props: { to: "Auth", from: "Bookmarks" } });
+            navigation.navigate("Auth");
+          }}
+        />
       </View>
     );
   }
@@ -63,7 +83,10 @@ export default function BookmarksScreen({ navigation }: Props) {
         renderItem={({ item }) => (
           <Pressable
             style={styles.row}
-            onPress={() => navigation.navigate("Restaurant", { siret: item.siret })}
+            onPress={() => {
+              trackEvent({ name: "restaurant_open", props: { source: "bookmarks_list" } });
+              navigation.navigate("Restaurant", { siret: item.siret });
+            }}
           >
             <View style={styles.thumb} />
             <View style={styles.rowBody}>

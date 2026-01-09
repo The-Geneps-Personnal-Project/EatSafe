@@ -13,6 +13,8 @@ import {
   signupEmailPassword,
   subscribeAuth,
 } from "../firebase/auth";
+import { useConsent } from "../features/consent/ConsentContext";
+import { setUser as telemetrySetUser } from "../telemetry/telemetry";
 import { toErrorMessage } from "../utils/errors";
 
 export type AuthUser = {
@@ -34,7 +36,8 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: PropsWithChildren) {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const { consent } = useConsent();
+  const [user, setUserState] = useState<AuthUser | null>(null);
   const [firebaseEnabled, setFirebaseEnabled] = useState(true);
   const [firebaseDisabledReason, setFirebaseDisabledReason] = useState<
     string | undefined
@@ -44,10 +47,10 @@ export function AuthProvider({ children }: PropsWithChildren) {
     try {
       const unsub = subscribeAuth((u) => {
         if (!u) {
-          setUser(null);
+          setUserState(null);
           return;
         }
-        setUser({ uid: u.uid, email: u.email });
+        setUserState({ uid: u.uid, email: u.email });
       });
       setFirebaseEnabled(true);
       setFirebaseDisabledReason(undefined);
@@ -55,10 +58,14 @@ export function AuthProvider({ children }: PropsWithChildren) {
     } catch (e) {
       setFirebaseEnabled(false);
       setFirebaseDisabledReason(toErrorMessage(e));
-      setUser(null);
+      setUserState(null);
       return;
     }
   }, []);
+
+  useEffect(() => {
+    telemetrySetUser(user ? { id: user.uid } : null);
+  }, [consent, user?.uid]);
 
   const login = async (email: string, password: string) => {
     await loginEmailPassword(email, password);
@@ -76,7 +83,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
     () => ({
       user,
       isGuest: !user,
-      setUser,
+      setUser: setUserState,
       login,
       signup,
       logout,
