@@ -26,6 +26,7 @@ export default function RestaurantScreen({ navigation, route }: Props) {
     const { isOnline } = useNetwork();
 
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [restaurant, setRestaurant] = useState<RestaurantDetails | null>(null);
     const [minimalOffline, setMinimalOffline] = useState<{
         siret: string;
@@ -73,64 +74,67 @@ export default function RestaurantScreen({ navigation, route }: Props) {
         navigation.setOptions({ title });
     }, [navigation, title]);
 
-    useEffect(() => {
-        void (async () => {
-            setLoading(true);
+    const load = async () => {
+        setLoading(true);
+        setLoadError(null);
+
+        try {
+            if (publicId) {
+                const r = await fetchRestaurantDetailByPublicId(publicId);
+                setRestaurant(r);
+                await upsertMinimal(r);
+                setBookmarkedState(await isBookmarked(r.siret));
+                setVisitedState(await isVisited(r.siret));
+                setMinimalOffline(null);
+                return;
+            }
+
+            if (!siret) {
+                setLoadError("Restaurant introuvable.");
+                return;
+            }
+
+            setBookmarkedState(await isBookmarked(siret));
+            setVisitedState(await isVisited(siret));
+
+            const cached = await loadCachedDetailsBySiret(siret);
+            if (cached) {
+                setRestaurant(cached);
+                setMinimalOffline(null);
+                return;
+            }
 
             try {
-                if (publicId) {
-                    const r = await fetchRestaurantDetailByPublicId(publicId);
-                    setRestaurant(r);
-                    await upsertMinimal(r);
-                    setBookmarkedState(await isBookmarked(r.siret));
-                    setVisitedState(await isVisited(r.siret));
-                    setMinimalOffline(null);
-                    setLoading(false);
-                    return;
+                const r = await fetchRestaurantDetailBySiret(siret);
+                setRestaurant(r);
+                setMinimalOffline(null);
+                await upsertMinimal(r);
+            } catch (e) {
+                const minimal = await loadCachedMinimalBySiret(siret);
+                if (minimal) {
+                    setRestaurant(null);
+                    setMinimalOffline({
+                        siret: minimal.siret,
+                        name: minimal.name,
+                        address: minimal.address,
+                        city: minimal.city,
+                        sanitary_score: minimal.sanitary_score,
+                    });
+                } else {
+                    setLoadError(toErrorMessage(e));
                 }
-
-                if (!siret) {
-                    setLoading(false);
-                    return;
-                }
-
-                setBookmarkedState(await isBookmarked(siret));
-                setVisitedState(await isVisited(siret));
-
-                const cached = await loadCachedDetailsBySiret(siret);
-                if (cached) {
-                    setRestaurant(cached);
-                    setMinimalOffline(null);
-                    setLoading(false);
-                    return;
-                }
-
-                try {
-                    const r = await fetchRestaurantDetailBySiret(siret);
-                    setRestaurant(r);
-                    setMinimalOffline(null);
-                    await upsertMinimal(r);
-                } catch {
-                    const minimal = await loadCachedMinimalBySiret(siret);
-                    if (minimal) {
-                        setRestaurant(null);
-                        setMinimalOffline({
-                            siret: minimal.siret,
-                            name: minimal.name,
-                            address: minimal.address,
-                            city: minimal.city,
-                            sanitary_score: minimal.sanitary_score,
-                        });
-                    } else {
-                        throw new Error("no-cache");
-                    }
-                }
-            } catch (e: any) {
-                Alert.alert("Erreur", "Impossible de charger ce restaurant.");
-            } finally {
-                setLoading(false);
             }
-        })();
+        } catch (e: any) {
+            const msg = toErrorMessage(e);
+            setLoadError(msg);
+            Alert.alert("Erreur", msg);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        void load();
     }, [publicId, siret]);
 
     if (loading) {
@@ -144,7 +148,10 @@ export default function RestaurantScreen({ navigation, route }: Props) {
     if (!restaurant && !minimalOffline) {
         return (
             <View style={styles.center}>
-                <Text>Aucun restaurant.</Text>
+                <Text style={styles.errorTitle}>Impossible de charger</Text>
+                {loadError ? <Text style={styles.errorBody}>{loadError}</Text> : null}
+                <View style={{ height: 10 }} />
+                <Button title="Réessayer" onPress={() => void load()} />
             </View>
         );
     }
@@ -267,6 +274,8 @@ export default function RestaurantScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
     container: { padding: 16, gap: 10 },
     center: { flex: 1, alignItems: "center", justifyContent: "center" },
+    errorTitle: { fontSize: 16, fontWeight: "800" },
+    errorBody: { marginTop: 6, color: "#444", textAlign: "center" },
     name: { fontSize: 22, fontWeight: "800" },
     addr: { color: "#444" },
     score: { fontWeight: "700" },
