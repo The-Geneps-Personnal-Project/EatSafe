@@ -292,6 +292,23 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                         void toggleVisited();
                     }}
                 />
+
+                <View style={{ height: 10 }} />
+
+                <Button
+                    title={isGuest ? "Ajouter à une liste (compte requis)" : "Ajouter à une liste"}
+                    onPress={() => {
+                        if (isGuest) {
+                            navigation.navigate("Auth");
+                            return;
+                        }
+                        if (!activeSiret) {
+                            Alert.alert("Listes", "Restaurant introuvable.");
+                            return;
+                        }
+                        navigation.navigate("Lists", { pickForSiret: activeSiret });
+                    }}
+                />
             </View>
         </ScrollView>
     );

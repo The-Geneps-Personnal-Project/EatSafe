@@ -33,15 +33,26 @@ export default function MapScreen({ navigation }: Props) {
     useLayoutEffect(() => {
         navigation.setOptions({
             headerRight: () => (
-                <Pressable
-                    onPress={() => {
-                        trackEvent({ name: "nav_open", props: { to: "Bookmarks", from: "Map" } });
-                        navigation.navigate("Bookmarks");
-                    }}
-                    style={styles.headerBtn}
-                >
-                    <Text style={styles.headerBtnText}>Favoris</Text>
-                </Pressable>
+                <View style={styles.headerRow}>
+                    <Pressable
+                        onPress={() => {
+                            trackEvent({ name: "nav_open", props: { to: "Bookmarks", from: "Map" } });
+                            navigation.navigate("Bookmarks");
+                        }}
+                        style={styles.headerBtn}
+                    >
+                        <Text style={styles.headerBtnText}>Favoris</Text>
+                    </Pressable>
+                    <Pressable
+                        onPress={() => {
+                            trackEvent({ name: "nav_open", props: { to: "Lists", from: "Map" } });
+                            navigation.navigate("Lists");
+                        }}
+                        style={styles.headerBtn}
+                    >
+                        <Text style={styles.headerBtnText}>Listes</Text>
+                    </Pressable>
+                </View>
             )
         });
     }, [navigation]);
@@ -295,6 +306,7 @@ export default function MapScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
     container: { flex: 1 },
     map: { flex: 1 },
+    headerRow: { flexDirection: "row", gap: 8 },
     headerBtn: {
         paddingHorizontal: 10,
         paddingVertical: 6,

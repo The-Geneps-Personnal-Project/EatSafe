@@ -42,5 +42,22 @@ export async function migrateDb(): Promise<void> {
           siret TEXT PRIMARY KEY NOT NULL,
           visited_at INTEGER NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS lists (
+          id INTEGER PRIMARY KEY NOT NULL,
+          name TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          UNIQUE(name)
+        );
+
+        CREATE TABLE IF NOT EXISTS list_items (
+          list_id INTEGER NOT NULL,
+          siret TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          PRIMARY KEY (list_id, siret),
+          FOREIGN KEY (list_id) REFERENCES lists(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_list_items_siret ON list_items (siret);
     `);
 }
