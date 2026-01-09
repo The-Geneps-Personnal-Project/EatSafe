@@ -613,7 +613,7 @@ const styles = StyleSheet.create({
         backgroundColor: "rgba(0,0,0,0.08)",
         alignItems: "flex-end",
         justifyContent: "flex-start",
-        paddingTop: 56,
+        paddingTop: 92,
         paddingRight: 12
     },
     morePopover: {
