@@ -89,6 +89,7 @@ function buildMarkers(restaurants: Restaurant[], region: Region): MapMarker[] {
 
 export default function MapScreen({ navigation }: Props) {
     const mapRef = useRef<MapView | null>(null);
+    const listRef = useRef<FlatList<Restaurant> | null>(null);
 
     useLayoutEffect(() => {
         navigation.setOptions({
@@ -137,6 +138,7 @@ export default function MapScreen({ navigation }: Props) {
 
     const [region, setRegion] = useState<Region>(DEFAULT_REGION);
     const [restaurants, setRestaurants] = useState<Restaurant[]>([]);
+    const [selectedSiret, setSelectedSiret] = useState<string | null>(null);
 
     const [query, setQuery] = useState("");
     const [results, setResults] = useState<SearchItem[]>([]);
@@ -145,6 +147,19 @@ export default function MapScreen({ navigation }: Props) {
     const [pushEnabled, setPushEnabled] = useState(false);
 
     const markers = useMemo(() => buildMarkers(restaurants, region), [restaurants, region.latitudeDelta, region.longitudeDelta]);
+
+    const restaurantsBySiret = useMemo(() => {
+        const map = new Map<string, Restaurant>();
+        for (const r of restaurants) map.set(r.siret, r);
+        return map;
+    }, [restaurants]);
+
+    const selectedRestaurant = useMemo(() => {
+        if (!selectedSiret) return null;
+        return restaurantsBySiret.get(selectedSiret) ?? null;
+    }, [restaurantsBySiret, selectedSiret]);
+
+    const listData = useMemo(() => restaurants.slice(0, 80), [restaurants]);
 
     useEffect(() => {
         trackEvent({ name: "screen_view", props: { screen: "Map" } });
@@ -269,11 +284,41 @@ export default function MapScreen({ navigation }: Props) {
         return () => debounced.cancel();
     }, [query, debounced]);
 
-    const selectRestaurant = async (r: Restaurant, source: "search" | "marker") => {
-        await upsertMinimal(r);
-        setRestaurants([r]);
+    const getScoreColor = (score: number | null | undefined) => {
+        const v = score === null || score === undefined ? NaN : Number(score);
+        if (v === 4) return "#d11";
+        if (v === 3) return "#f59e0b";
+        if (v === 2) return "#22c55e";
+        return "#2563eb";
+    };
 
+    const openRestaurant = async (r: Restaurant, source: "search" | "marker_callout" | "list") => {
+        try {
+            await upsertMinimal(r);
+        } catch {
+            // ignore
+        }
         trackEvent({ name: "restaurant_open", props: { source } });
+        navigation.navigate("Restaurant", { siret: r.siret });
+    };
+
+    const selectOnMap = (r: Restaurant, source: "marker" | "list") => {
+        setSelectedSiret(r.siret);
+        trackEvent({ name: "restaurant_select", props: { source } });
+
+        const next: Region = {
+            latitude: r.lat,
+            longitude: r.lng,
+            latitudeDelta: Math.min(region.latitudeDelta, 0.04),
+            longitudeDelta: Math.min(region.longitudeDelta, 0.04)
+        };
+        setRegion(next);
+        mapRef.current?.animateToRegion(next, 300);
+    };
+
+    const selectRestaurantFromSearch = async (r: Restaurant) => {
+        setRestaurants([r]);
+        setSelectedSiret(r.siret);
 
         const next: Region = {
             latitude: r.lat,
@@ -284,7 +329,7 @@ export default function MapScreen({ navigation }: Props) {
         setRegion(next);
         mapRef.current?.animateToRegion(next, 350);
 
-        navigation.navigate("Restaurant", { siret: r.siret });
+        await openRestaurant(r, "search");
     };
 
     const selectCity = async (city: string, lat: number, lng: number) => {
@@ -302,6 +347,7 @@ export default function MapScreen({ navigation }: Props) {
         try {
             const data = await fetchRestaurantsByCity(city);
             setRestaurants(data);
+            setSelectedSiret(null);
             trackEvent({ name: "city_results", props: { count: data.length } });
         } catch {
             trackEvent({ name: "city_results_failed" });
@@ -333,13 +379,18 @@ export default function MapScreen({ navigation }: Props) {
                 {markers.map((m) => {
                     if (m.kind === "restaurant") {
                         const r = m.restaurant;
+                        const selected = selectedSiret === r.siret;
                         return (
                             <Marker
                                 key={r.siret}
                                 coordinate={{ latitude: r.lat, longitude: r.lng }}
                                 title={r.name}
                                 description={`${r.address}, ${r.city}`}
-                                onPress={() => void selectRestaurant(r, "marker")}
+                                pinColor={selected ? "#111" : "#2563eb"}
+                                tracksViewChanges={false}
+                                onPress={() => selectOnMap(r, "marker")}
+                                onCalloutPress={() => void openRestaurant(r, "marker_callout")}
+                                zIndex={selected ? 10 : 0}
                             />
                         );
                     }
@@ -396,7 +447,7 @@ export default function MapScreen({ navigation }: Props) {
                                 if (item.kind === "restaurant") {
                                     const r = item.restaurant;
                                     return (
-                                        <Pressable onPress={() => void selectRestaurant(r, "search")} style={styles.row}>
+                                        <Pressable onPress={() => void selectRestaurantFromSearch(r)} style={styles.row}>
                                             <Text style={styles.rowTitle}>{r.name}</Text>
                                             <Text style={styles.rowSub}>{r.address}, {r.city}</Text>
                                         </Pressable>
@@ -414,6 +465,54 @@ export default function MapScreen({ navigation }: Props) {
                     </View>
                 )}
             </View>
+
+            {listData.length > 1 && results.length === 0 ? (
+                <View style={styles.bottomPanel}>
+                    <View style={styles.bottomHeader}>
+                        <Text style={styles.bottomTitle}>{restaurants.length} résultats</Text>
+                        {selectedRestaurant ? (
+                            <Pressable onPress={() => void openRestaurant(selectedRestaurant, "list")} style={styles.openBtn}>
+                                <Text style={styles.openBtnText}>Ouvrir</Text>
+                            </Pressable>
+                        ) : null}
+                    </View>
+
+                    <FlatList
+                        ref={(r) => {
+                            listRef.current = r;
+                        }}
+                        data={listData}
+                        keyExtractor={(r) => r.siret}
+                        keyboardShouldPersistTaps="handled"
+                        renderItem={({ item, index }) => {
+                            const selected = item.siret === selectedSiret;
+                            return (
+                                <Pressable
+                                    onPress={() => {
+                                        selectOnMap(item, "list");
+                                        try {
+                                            listRef.current?.scrollToIndex({ index, animated: true, viewPosition: 0.3 });
+                                        } catch {
+                                            // ignore
+                                        }
+                                    }}
+                                    style={[styles.listRow, selected ? styles.listRowSelected : null]}
+                                >
+                                    <View style={[styles.scorePip, { backgroundColor: getScoreColor(item.sanitary_score) }]} />
+                                    <View style={{ flex: 1 }}>
+                                        <Text style={styles.listTitle} numberOfLines={1}>
+                                            {item.name}
+                                        </Text>
+                                        <Text style={styles.listSub} numberOfLines={1}>
+                                            {item.city}
+                                        </Text>
+                                    </View>
+                                </Pressable>
+                            );
+                        }}
+                    />
+                </View>
+            ) : null}
         </View>
     );
 }
@@ -481,5 +580,52 @@ const styles = StyleSheet.create({
     clusterText: {
         color: "#fff",
         fontWeight: "800"
-    }
+    },
+    bottomPanel: {
+        position: "absolute",
+        left: 12,
+        right: 12,
+        bottom: 12,
+        maxHeight: 240,
+        backgroundColor: "rgba(255,255,255,0.95)",
+        borderRadius: 12,
+        paddingVertical: 8,
+        paddingHorizontal: 10
+    },
+    bottomHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        paddingBottom: 6
+    },
+    bottomTitle: {
+        fontWeight: "800"
+    },
+    openBtn: {
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 999,
+        backgroundColor: "rgba(0,0,0,0.06)"
+    },
+    openBtnText: {
+        fontWeight: "800"
+    },
+    listRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 10,
+        paddingVertical: 10
+    },
+    listRowSelected: {
+        backgroundColor: "rgba(0,0,0,0.04)",
+        borderRadius: 10,
+        paddingHorizontal: 8
+    },
+    scorePip: {
+        width: 10,
+        height: 10,
+        borderRadius: 999
+    },
+    listTitle: { fontWeight: "800" },
+    listSub: { color: "#666", marginTop: 2, fontSize: 12 }
 });
