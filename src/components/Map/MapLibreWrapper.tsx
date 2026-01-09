@@ -84,6 +84,42 @@ export default function MapLibreWrapper() {
     const CLUSTER_COUNT_LAYER_ID = "restaurant-cluster-count";
     const UNCLUSTERED_LAYER_ID = "restaurant-unclustered";
 
+    const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
+
+    const updateSelectionStyle = (map: maplibregl.Map, selectedSiret: string | null) => {
+        if (!map.getLayer(UNCLUSTERED_LAYER_ID)) return;
+        const sel = selectedSiret ?? "";
+
+        map.setPaintProperty(UNCLUSTERED_LAYER_ID, "circle-radius", [
+            "case",
+            ["==", ["get", "siret"], sel],
+            12,
+            9,
+        ]);
+
+        map.setPaintProperty(UNCLUSTERED_LAYER_ID, "circle-stroke-width", [
+            "case",
+            ["==", ["get", "siret"], sel],
+            3,
+            2,
+        ]);
+    };
+
+    const reverseGeocodePostalCodeFallback = async (lat: number, lng: number): Promise<string | null> => {
+        try {
+            const url = `https://api-adresse.data.gouv.fr/reverse/?lat=${encodeURIComponent(
+                String(lat)
+            )}&lon=${encodeURIComponent(String(lng))}`;
+            const res = await fetch(url);
+            if (!res.ok) return null;
+            const data = (await res.json()) as any;
+            const postcode = data?.features?.[0]?.properties?.postcode;
+            return typeof postcode === "string" && postcode.trim() ? postcode.trim() : null;
+        } catch {
+            return null;
+        }
+    };
+
     const hidePoiLayers = (map: maplibregl.Map) => {
         const style = map.getStyle();
         const layers = style?.layers ?? [];
@@ -202,6 +238,16 @@ export default function MapLibreWrapper() {
             if (r) void handleSelect(r);
         });
 
+        map.on("click", (e) => {
+            // Tap on empty map -> dismiss card
+            const hit = map.queryRenderedFeatures(e.point, {
+                layers: [CLUSTERS_LAYER_ID, UNCLUSTERED_LAYER_ID],
+            });
+            if (!hit.length) {
+                setSelectedRestaurant(null);
+            }
+        });
+
         map.on("mouseenter", CLUSTERS_LAYER_ID, () => {
             map.getCanvas().style.cursor = "pointer";
         });
@@ -258,7 +304,20 @@ export default function MapLibreWrapper() {
 
     const handleSelect = async (r: Restaurant) => {
         const cached = detailCacheRef.current.get(r.siret);
-        if (cached) return;
+        if (cached) {
+            setSelectedRestaurant(cached);
+            if (mapRef.current) {
+                updateSelectionStyle(mapRef.current, cached.siret);
+                if (mapRef.current.getZoom() < 15) {
+                    mapRef.current.easeTo({
+                        center: [cached.lng, cached.lat],
+                        zoom: 15,
+                        duration: 400,
+                    });
+                }
+            }
+            return;
+        }
 
         try {
             const data = await fetchRestaurantDetail(r.siret);
@@ -270,6 +329,7 @@ export default function MapLibreWrapper() {
             setSelectedRestaurant(data);
 
             if (mapRef.current && mapRef.current.getZoom() < 15) {
+                updateSelectionStyle(mapRef.current, data.siret);
                 mapRef.current.easeTo({
                     center: [data.lng, data.lat],
                     zoom: 15,
@@ -281,7 +341,11 @@ export default function MapLibreWrapper() {
         }
     };
 
-    const [selectedRestaurant, setSelectedRestaurant] = useState<Restaurant | null>(null);
+    useEffect(() => {
+        if (!mapRef.current) return;
+        updateSelectionStyle(mapRef.current, selectedRestaurant?.siret ?? null);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [selectedRestaurant?.siret]);
 
     useEffect(() => {
         if (!mapContainerRef.current || mapRef.current) return;
@@ -336,38 +400,41 @@ export default function MapLibreWrapper() {
                 }
 
                 const geocoderCtor = (window as any).google?.maps?.Geocoder;
-                if (!geocoderCtor) return;
 
-                const geocoder = new geocoderCtor();
-                geocoder.geocode({ location: { lat, lng } }, async (results: any, status: string) => {
-                    if (status === "OK" && results) {
+                const loadByPostalCode = async (postalCode: string | null) => {
+                    if (!postalCode) return;
+
+                    let depCode = postalCode.substring(0, 2);
+                    if (depCode === "20") depCode = "2A";
+
+                    try {
+                        const restaurants = await fetchFilteredRestaurants({ dep_code: depCode });
+                        if (restaurants.length && mapRef.current) {
+                            setRestaurantsOnMap(restaurants);
+                            fitBoundsToRestaurants(restaurants);
+                        } else {
+                            showToast(`Aucun restaurant trouvé dans le département ${depCode}.`, "warning");
+                        }
+                    } catch {
+                        showToast("Erreur lors du chargement des restaurants à proximité.", "error");
+                    }
+                };
+
+                if (geocoderCtor) {
+                    const geocoder = new geocoderCtor();
+                    geocoder.geocode({ location: { lat, lng } }, async (results: any, status: string) => {
+                        if (status !== "OK" || !results) return;
                         const postalCodeComponent = results
                             .flatMap((r: any) => r.address_components)
                             .find((c: any) => c.types.includes("postal_code"));
-
                         const postalCode = postalCodeComponent?.long_name;
-
-                        if (postalCode) {
-                            let depCode = postalCode.substring(0, 2);
-
-                            if (depCode === "20") {
-                                depCode = "2A";
-                            }
-
-                            try {
-                                const restaurants = await fetchFilteredRestaurants({ dep_code: depCode });
-                                if (restaurants.length && mapRef.current) {
-                                    setRestaurantsOnMap(restaurants);
-                                    fitBoundsToRestaurants(restaurants);
-                                } else {
-                                    showToast(`Aucun restaurant trouvé dans le département ${depCode}.`, "warning");
-                                }
-                            } catch {
-                                showToast("Erreur lors du chargement des restaurants à proximité.", "error");
-                            }
-                        }
-                    }
-                });
+                        await loadByPostalCode(typeof postalCode === "string" ? postalCode : null);
+                    });
+                } else {
+                    // No Google geocoder available: fallback to BAN reverse geocoding (France).
+                    const postalCode = await reverseGeocodePostalCodeFallback(lat, lng);
+                    await loadByPostalCode(postalCode);
+                }
             },
             () => {
                 setMapCenter(DEFAULT_CENTER);
