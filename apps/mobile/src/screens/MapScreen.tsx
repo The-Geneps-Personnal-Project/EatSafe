@@ -20,12 +20,64 @@ type SearchItem =
     | { kind: "restaurant"; restaurant: Restaurant }
     | { kind: "city"; city: string; lat: number; lng: number };
 
+type MapMarker =
+    | { kind: "restaurant"; restaurant: Restaurant }
+    | { kind: "cluster"; id: string; lat: number; lng: number; count: number };
+
 const DEFAULT_REGION: Region = {
     latitude: 46.603354,
     longitude: 1.888334,
     latitudeDelta: 8,
     longitudeDelta: 8
 };
+
+function buildMarkers(restaurants: Restaurant[], region: Region): MapMarker[] {
+    if (restaurants.length <= 25) return restaurants.map((r) => ({ kind: "restaurant" as const, restaurant: r }));
+
+    const grid = 10;
+    const latCell = Math.max(region.latitudeDelta / grid, 0.002);
+    const lngCell = Math.max(region.longitudeDelta / grid, 0.002);
+
+    const buckets = new Map<
+        string,
+        {
+            count: number;
+            sumLat: number;
+            sumLng: number;
+            first: Restaurant;
+        }
+    >();
+
+    for (const r of restaurants) {
+        const x = Math.floor((r.lng + 180) / lngCell);
+        const y = Math.floor((r.lat + 90) / latCell);
+        const key = `${x}:${y}`;
+        const prev = buckets.get(key);
+        if (!prev) {
+            buckets.set(key, { count: 1, sumLat: r.lat, sumLng: r.lng, first: r });
+        } else {
+            prev.count += 1;
+            prev.sumLat += r.lat;
+            prev.sumLng += r.lng;
+        }
+    }
+
+    const markers: MapMarker[] = [];
+    for (const [key, b] of buckets.entries()) {
+        if (b.count === 1) {
+            markers.push({ kind: "restaurant", restaurant: b.first });
+        } else {
+            markers.push({
+                kind: "cluster",
+                id: key,
+                lat: b.sumLat / b.count,
+                lng: b.sumLng / b.count,
+                count: b.count
+            });
+        }
+    }
+    return markers;
+}
 
 export default function MapScreen({ navigation }: Props) {
     const mapRef = useRef<MapView | null>(null);
@@ -65,6 +117,8 @@ export default function MapScreen({ navigation }: Props) {
     const [loading, setLoading] = useState(false);
     const [citySearchUnavailable, setCitySearchUnavailable] = useState(false);
     const [pushEnabled, setPushEnabled] = useState(false);
+
+    const markers = useMemo(() => buildMarkers(restaurants, region), [restaurants, region.latitudeDelta, region.longitudeDelta]);
 
     useEffect(() => {
         trackEvent({ name: "screen_view", props: { screen: "Map" } });
@@ -242,15 +296,42 @@ export default function MapScreen({ navigation }: Props) {
                 region={region}
                 onRegionChangeComplete={setRegion}
             >
-                {restaurants.map((r) => (
-                    <Marker
-                        key={r.siret}
-                        coordinate={{ latitude: r.lat, longitude: r.lng }}
-                        title={r.name}
-                        description={`${r.address}, ${r.city}`}
-                        onPress={() => void selectRestaurant(r, "marker")}
-                    />
-                ))}
+                {markers.map((m) => {
+                    if (m.kind === "restaurant") {
+                        const r = m.restaurant;
+                        return (
+                            <Marker
+                                key={r.siret}
+                                coordinate={{ latitude: r.lat, longitude: r.lng }}
+                                title={r.name}
+                                description={`${r.address}, ${r.city}`}
+                                onPress={() => void selectRestaurant(r, "marker")}
+                            />
+                        );
+                    }
+
+                    return (
+                        <Marker
+                            key={`cluster-${m.id}`}
+                            coordinate={{ latitude: m.lat, longitude: m.lng }}
+                            onPress={() => {
+                                const next: Region = {
+                                    latitude: m.lat,
+                                    longitude: m.lng,
+                                    latitudeDelta: Math.max(region.latitudeDelta / 2, 0.02),
+                                    longitudeDelta: Math.max(region.longitudeDelta / 2, 0.02)
+                                };
+                                setRegion(next);
+                                mapRef.current?.animateToRegion(next, 350);
+                                trackEvent({ name: "cluster_zoom", props: { count: m.count } });
+                            }}
+                        >
+                            <View style={styles.clusterBubble}>
+                                <Text style={styles.clusterText}>{m.count}</Text>
+                            </View>
+                        </Marker>
+                    );
+                })}
             </MapView>
 
             <View style={styles.searchBox}>
@@ -351,5 +432,20 @@ const styles = StyleSheet.create({
         paddingVertical: 10
     },
     rowTitle: { fontWeight: "700" },
-    rowSub: { color: "#666", marginTop: 2 }
+    rowSub: { color: "#666", marginTop: 2 },
+    clusterBubble: {
+        minWidth: 34,
+        height: 34,
+        borderRadius: 17,
+        paddingHorizontal: 10,
+        alignItems: "center",
+        justifyContent: "center",
+        backgroundColor: "rgba(0,0,0,0.55)",
+        borderWidth: 2,
+        borderColor: "rgba(255,255,255,0.9)"
+    },
+    clusterText: {
+        color: "#fff",
+        fontWeight: "800"
+    }
 });
