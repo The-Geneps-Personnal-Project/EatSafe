@@ -9,17 +9,20 @@ import { linking } from "./navigation/linking";
 import { ConsentGate } from "./features/consent/ConsentGate";
 import { AuthProvider } from "./auth/authState";
 import { TelemetryProvider } from "./telemetry/TelemetryProvider";
+import { PushRegistrationManager } from "./features/notifications/PushRegistrationManager";
 
 export default function App() {
     return (
         <SafeAreaProvider>
             <ConsentGate>
                 <TelemetryProvider>
-                    <NavigationContainer linking={linking}>
-                        <AuthProvider>
-                            <RootNavigator />
-                        </AuthProvider>
-                    </NavigationContainer>
+                    <PushRegistrationManager>
+                        <NavigationContainer linking={linking}>
+                            <AuthProvider>
+                                <RootNavigator />
+                            </AuthProvider>
+                        </NavigationContainer>
+                    </PushRegistrationManager>
                 </TelemetryProvider>
             </ConsentGate>
             <StatusBar style="auto" />
