@@ -92,44 +92,15 @@ export default function MapScreen({ navigation }: Props) {
     useLayoutEffect(() => {
         navigation.setOptions({
             headerRight: () => (
-                <View style={styles.headerRow}>
-                    <Pressable
-                        onPress={() => {
-                            trackEvent({ name: "nav_open", props: { to: "Settings", from: "Map" } });
-                            navigation.navigate("Settings");
-                        }}
-                        style={styles.headerBtn}
-                    >
-                        <Text style={styles.headerBtnText}>Compte</Text>
-                    </Pressable>
-                    <Pressable
-                        onPress={() => {
-                            trackEvent({ name: "nav_open", props: { to: "Bookmarks", from: "Map" } });
-                            navigation.navigate("Bookmarks");
-                        }}
-                        style={styles.headerBtn}
-                    >
-                        <Text style={styles.headerBtnText}>Favoris</Text>
-                    </Pressable>
-                    <Pressable
-                        onPress={() => {
-                            trackEvent({ name: "nav_open", props: { to: "Visited", from: "Map" } });
-                            navigation.navigate("Visited");
-                        }}
-                        style={styles.headerBtn}
-                    >
-                        <Text style={styles.headerBtnText}>Historique</Text>
-                    </Pressable>
-                    <Pressable
-                        onPress={() => {
-                            trackEvent({ name: "nav_open", props: { to: "Lists", from: "Map" } });
-                            navigation.navigate("Lists");
-                        }}
-                        style={styles.headerBtn}
-                    >
-                        <Text style={styles.headerBtnText}>Listes</Text>
-                    </Pressable>
-                </View>
+                <Pressable
+                    onPress={() => {
+                        trackEvent({ name: "nav_open", props: { to: "Settings", from: "Map" } });
+                        navigation.navigate("Settings");
+                    }}
+                    style={styles.headerBtn}
+                >
+                    <Text style={styles.headerBtnText}>Compte</Text>
+                </Pressable>
             )
         });
     }, [navigation]);
@@ -478,7 +449,6 @@ export default function MapScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
     container: { flex: 1 },
     map: { flex: 1 },
-    headerRow: { flexDirection: "row", gap: 8 },
     headerBtn: {
         paddingHorizontal: 10,
         paddingVertical: 6,
