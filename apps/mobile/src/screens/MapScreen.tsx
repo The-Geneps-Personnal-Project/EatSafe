@@ -45,6 +45,7 @@ export default function MapScreen({ navigation }: Props) {
     const [query, setQuery] = useState("");
     const [results, setResults] = useState<SearchItem[]>([]);
     const [loading, setLoading] = useState(false);
+    const [citySearchUnavailable, setCitySearchUnavailable] = useState(false);
     const [pushEnabled, setPushEnabled] = useState(false);
 
     useEffect(() => {
@@ -101,15 +102,24 @@ export default function MapScreen({ navigation }: Props) {
         const q = raw.trim();
         if (q.length < 2) {
             setResults([]);
+            setCitySearchUnavailable(false);
             return;
         }
 
         setLoading(true);
         try {
-            const [dbRestaurants, cities] = await Promise.all([
+            setCitySearchUnavailable(false);
+
+            const [dbRestaurants, citiesResult] = await Promise.all([
                 searchRestaurants(q),
-                searchCities(q).catch(() => [])
+                searchCities(q).then(
+                    (cities) => ({ ok: true as const, cities }),
+                    () => ({ ok: false as const, cities: [] })
+                )
             ]);
+
+            if (!citiesResult.ok) setCitySearchUnavailable(true);
+            const cities = citiesResult.cities;
 
             const cityItems: SearchItem[] = cities.slice(0, 3).map((c) => ({
                 kind: "city" as const,
@@ -125,7 +135,7 @@ export default function MapScreen({ navigation }: Props) {
 
             setResults(items);
         } catch (e: any) {
-            setResults([]);
+            // Keep previous results on transient errors.
         } finally {
             setLoading(false);
         }
@@ -210,6 +220,9 @@ export default function MapScreen({ navigation }: Props) {
                     style={styles.input}
                     autoCapitalize="none"
                 />
+                {citySearchUnavailable ? (
+                    <Text style={styles.hint}>Recherche de villes indisponible (API).</Text>
+                ) : null}
                 {loading && <ActivityIndicator />}
 
                 {results.length > 0 && (
@@ -277,6 +290,10 @@ const styles = StyleSheet.create({
         borderRadius: 10,
         paddingHorizontal: 12,
         paddingVertical: 10
+    },
+    hint: {
+        color: "#666",
+        fontSize: 12
     },
     results: {
         maxHeight: 260,
