@@ -10,6 +10,7 @@ import { ConsentGate } from "./features/consent/ConsentGate";
 import { AuthProvider } from "./auth/authState";
 import { TelemetryProvider } from "./telemetry/TelemetryProvider";
 import { PushRegistrationManager } from "./features/notifications/PushRegistrationManager";
+import { NotificationRouter } from "./features/notifications/NotificationRouter";
 
 export default function App() {
     return (
@@ -18,6 +19,7 @@ export default function App() {
                 <TelemetryProvider>
                     <PushRegistrationManager>
                         <NavigationContainer linking={linking}>
+                            <NotificationRouter />
                             <AuthProvider>
                                 <RootNavigator />
                             </AuthProvider>
