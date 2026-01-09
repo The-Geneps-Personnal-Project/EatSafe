@@ -17,3 +17,5 @@ Notes:
 - `GET /restaurants/detail?siret=...`
 - `GET /restaurants/public/:publicId` (to be added)
 - `GET /geo/cities?q=...` (to be added; proxy BAN)
+
+More details: `docs/backend-api.md`
