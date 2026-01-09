@@ -1,0 +1,307 @@
+import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { ActivityIndicator, Alert, Button, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import type { NativeStackScreenProps } from "@react-navigation/native-stack";
+
+import type { RootStackParamList } from "../navigation/types";
+import type { RestaurantDetails } from "../types/restaurant";
+import { fetchRestaurantDetailByPublicId, fetchRestaurantDetailBySiret } from "../services/restaurantService";
+import { loadCachedDetailsBySiret, loadCachedMinimalBySiret, upsertFullForBookmark, upsertMinimal } from "../storage/restaurantCache";
+import { useAuth } from "../auth/authState";
+import { useNetwork } from "../hooks/useNetwork";
+import { isBookmarked, setBookmarked } from "../storage/bookmarks";
+import { isVisited, setVisited } from "../storage/visited";
+import { buildShareUrl, ensurePublicIdForSiret } from "../services/shareService";
+import { shareLink } from "../utils/share";
+import { toErrorMessage } from "../utils/errors";
+
+type Props = NativeStackScreenProps<RootStackParamList, "Restaurant">;
+
+function isRestrictedGuestField(key: string) {
+    return key === "reviews" || key === "photos" || key === "opening_hours";
+}
+
+export default function RestaurantScreen({ navigation, route }: Props) {
+    const { publicId, siret } = route.params ?? {};
+    const { isGuest } = useAuth();
+    const { isOnline } = useNetwork();
+
+    const [loading, setLoading] = useState(true);
+    const [restaurant, setRestaurant] = useState<RestaurantDetails | null>(null);
+    const [minimalOffline, setMinimalOffline] = useState<{
+        siret: string;
+        name: string;
+        address: string;
+        city: string;
+        sanitary_score: number | null;
+    } | null>(null);
+
+    const [bookmarked, setBookmarkedState] = useState(false);
+    const [visited, setVisitedState] = useState(false);
+
+    const title = useMemo(() => restaurant?.name ?? "Restaurant", [restaurant?.name]);
+
+    useLayoutEffect(() => {
+        navigation.setOptions({
+            headerRight: () => (
+                <TouchableOpacity
+                    onPress={() => {
+                        void (async () => {
+                            if (!siret && !publicId) {
+                                Alert.alert("Partager", "Restaurant non partageable.");
+                                return;
+                            }
+
+                            try {
+                                const pid = publicId ?? (await ensurePublicIdForSiret(siret!));
+                                const url = buildShareUrl(pid);
+                                await shareLink(url, title);
+                            } catch (e) {
+                                Alert.alert("Partager", toErrorMessage(e));
+                            }
+                        })();
+                    }}
+                    style={{ paddingHorizontal: 10, paddingVertical: 6 }}
+                    accessibilityRole="button"
+                >
+                    <Text style={{ fontWeight: "800" }}>Partager</Text>
+                </TouchableOpacity>
+            )
+        });
+    }, [navigation, publicId, siret, title]);
+
+    useEffect(() => {
+        navigation.setOptions({ title });
+    }, [navigation, title]);
+
+    useEffect(() => {
+        void (async () => {
+            setLoading(true);
+
+            try {
+                if (publicId) {
+                    const r = await fetchRestaurantDetailByPublicId(publicId);
+                    setRestaurant(r);
+                    await upsertMinimal(r);
+                    setMinimalOffline(null);
+                    setLoading(false);
+                    return;
+                }
+
+                if (!siret) {
+                    setLoading(false);
+                    return;
+                }
+
+                setBookmarkedState(await isBookmarked(siret));
+                setVisitedState(await isVisited(siret));
+
+                const cached = await loadCachedDetailsBySiret(siret);
+                if (cached) {
+                    setRestaurant(cached);
+                    setMinimalOffline(null);
+                    setLoading(false);
+                    return;
+                }
+
+                try {
+                    const r = await fetchRestaurantDetailBySiret(siret);
+                    setRestaurant(r);
+                    setMinimalOffline(null);
+                    await upsertMinimal(r);
+                } catch {
+                    const minimal = await loadCachedMinimalBySiret(siret);
+                    if (minimal) {
+                        setRestaurant(null);
+                        setMinimalOffline({
+                            siret: minimal.siret,
+                            name: minimal.name,
+                            address: minimal.address,
+                            city: minimal.city,
+                            sanitary_score: minimal.sanitary_score,
+                        });
+                    } else {
+                        throw new Error("no-cache");
+                    }
+                }
+            } catch (e: any) {
+                Alert.alert("Erreur", "Impossible de charger ce restaurant.");
+            } finally {
+                setLoading(false);
+            }
+        })();
+    }, [publicId, siret]);
+
+    if (loading) {
+        return (
+            <View style={styles.center}>
+                <ActivityIndicator />
+            </View>
+        );
+    }
+
+    if (!restaurant && !minimalOffline) {
+        return (
+            <View style={styles.center}>
+                <Text>Aucun restaurant.</Text>
+            </View>
+        );
+    }
+
+    const RestrictedInfo = () => (
+        <View style={styles.restricted}>
+            <View style={styles.restrictedHeaderRow}>
+                <Text style={styles.restrictedTitle}>Informations limitées</Text>
+                <TouchableOpacity
+                    onPress={() => {
+                        Alert.alert(
+                            "Pourquoi certaines infos sont limitées ?",
+                            "En mode invité ou hors-ligne, certaines données (avis, photos, horaires, actions) ne sont pas disponibles.\n\nPour garder toutes les infos hors-ligne, ajoute le restaurant en favoris."
+                        );
+                    }}
+                    accessibilityRole="button"
+                >
+                    <Text style={styles.questionMark}>?</Text>
+                </TouchableOpacity>
+            </View>
+            <Text style={styles.restrictedBody}>
+                Certaines informations sont disponibles uniquement en mode connecté.
+                Pour un accès complet (et un mode hors-ligne complet), ajoutez ce restaurant en favoris.
+            </Text>
+            <Button title="Se connecter / Créer un compte" onPress={() => navigation.navigate("Auth")} />
+        </View>
+    );
+
+    const base = restaurant ?? minimalOffline;
+    const sanitary = base?.sanitary_score ?? "—";
+
+    const toggleBookmark = async () => {
+        if (isGuest) {
+            navigation.navigate("Auth");
+            return;
+        }
+
+        if (!siret) return;
+        const next = !bookmarked;
+        await setBookmarked(siret, next);
+        setBookmarkedState(next);
+
+        if (next) {
+            // Ensure we persist full details for offline if possible.
+            try {
+                const r = restaurant ?? (await fetchRestaurantDetailBySiret(siret));
+                setRestaurant(r);
+                setMinimalOffline(null);
+                await upsertFullForBookmark(r, true);
+            } catch {
+                // If offline, we keep the bookmark flag and will fill details later.
+            }
+        }
+    };
+
+    const toggleVisited = async () => {
+        if (isGuest) {
+            navigation.navigate("Auth");
+            return;
+        }
+        if (!siret) return;
+        const next = !visited;
+        await setVisited(siret, next);
+        setVisitedState(next);
+    };
+
+    return (
+        <ScrollView contentContainerStyle={styles.container}>
+            {!isOnline ? (
+                <Text style={styles.offlineBanner}>Mode hors-ligne</Text>
+            ) : null}
+
+            <Text style={styles.name}>{base!.name}</Text>
+            <Text style={styles.addr}>{base!.address}, {base!.city}</Text>
+            <Text style={styles.score}>Score sanitaire: {sanitary}</Text>
+
+            {isGuest ? <RestrictedInfo /> : null}
+
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Détails</Text>
+                {restaurant ? (
+                    Object.entries(restaurant).map(([k, v]) => {
+                        if (k === "name" || k === "address" || k === "city" || k === "sanitary_score" || k === "lat" || k === "lng") return null;
+                        if (isGuest && isRestrictedGuestField(k)) return null;
+                        if (v === null || v === undefined) return null;
+                        return (
+                            <Text key={k} style={styles.kv}>
+                                {k}: {typeof v === "string" || typeof v === "number" ? String(v) : "[objet]"}
+                            </Text>
+                        );
+                    })
+                ) : (
+                    <Text style={styles.kv}>Informations détaillées indisponibles hors-ligne.</Text>
+                )}
+            </View>
+
+            <View style={styles.section}>
+                <Button
+                    title={isGuest ? "Favoris (compte requis)" : (bookmarked ? "Retirer des favoris" : "Ajouter aux favoris")}
+                    onPress={() => {
+                        void toggleBookmark();
+                    }}
+                />
+
+                <View style={{ height: 10 }} />
+
+                <Button
+                    title={isGuest ? "J’ai visité (compte requis)" : (visited ? "Visité ✅" : "J’ai visité")}
+                    onPress={() => {
+                        void toggleVisited();
+                    }}
+                />
+            </View>
+        </ScrollView>
+    );
+}
+
+const styles = StyleSheet.create({
+    container: { padding: 16, gap: 10 },
+    center: { flex: 1, alignItems: "center", justifyContent: "center" },
+    name: { fontSize: 22, fontWeight: "800" },
+    addr: { color: "#444" },
+    score: { fontWeight: "700" },
+    offlineBanner: {
+        alignSelf: "flex-start",
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 999,
+        backgroundColor: "#eee",
+        color: "#333",
+        fontWeight: "700"
+    },
+    restricted: {
+        marginTop: 8,
+        padding: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: "#f0c36d",
+        backgroundColor: "#fff7e6",
+        gap: 8
+    },
+    restrictedHeaderRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between"
+    },
+    restrictedTitle: { fontWeight: "800" },
+    questionMark: {
+        width: 26,
+        height: 26,
+        borderRadius: 13,
+        textAlign: "center",
+        textAlignVertical: "center",
+        backgroundColor: "rgba(0,0,0,0.08)",
+        overflow: "hidden",
+        fontWeight: "800"
+    },
+    restrictedBody: { color: "#444" },
+    section: { marginTop: 10, gap: 6 },
+    sectionTitle: { fontSize: 16, fontWeight: "800" },
+    kv: { color: "#333" }
+});
