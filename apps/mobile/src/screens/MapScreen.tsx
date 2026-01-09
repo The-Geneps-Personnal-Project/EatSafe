@@ -44,6 +44,9 @@ function buildMarkers(restaurants: Restaurant[], region: Region): MapMarker[] {
     const latCell = Math.max(region.latitudeDelta / grid, 0.002);
     const lngCell = Math.max(region.longitudeDelta / grid, 0.002);
 
+    const minLat = region.latitude - region.latitudeDelta / 2;
+    const minLng = region.longitude - region.longitudeDelta / 2;
+
     const buckets = new Map<
         string,
         {
@@ -55,8 +58,8 @@ function buildMarkers(restaurants: Restaurant[], region: Region): MapMarker[] {
     >();
 
     for (const r of restaurants) {
-        const x = Math.floor((r.lng + 180) / lngCell);
-        const y = Math.floor((r.lat + 90) / latCell);
+        const x = Math.floor((r.lng - minLng) / lngCell);
+        const y = Math.floor((r.lat - minLat) / latCell);
         const key = `${x}:${y}`;
         const prev = buckets.get(key);
         if (!prev) {
@@ -129,20 +132,52 @@ export default function MapScreen({ navigation }: Props) {
     const [citySearchUnavailable, setCitySearchUnavailable] = useState(false);
     const [moreOpen, setMoreOpen] = useState(false);
 
-    const markers = useMemo(() => buildMarkers(restaurants, region), [restaurants, region.latitudeDelta, region.longitudeDelta]);
+    const [filtersOpen, setFiltersOpen] = useState(false);
+    const [minScore, setMinScore] = useState<number | null>(null);
+    const [maxDistanceKm, setMaxDistanceKm] = useState<number | null>(null);
+
+    const haversineKm = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
+        const R = 6371;
+        const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+        const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+        const lat1 = (a.lat * Math.PI) / 180;
+        const lat2 = (b.lat * Math.PI) / 180;
+        const x =
+            Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+            Math.sin(dLng / 2) * Math.sin(dLng / 2) * Math.cos(lat1) * Math.cos(lat2);
+        const c = 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x));
+        return R * c;
+    };
+
+    const filteredRestaurants = useMemo(() => {
+        const center = { lat: region.latitude, lng: region.longitude };
+        return restaurants.filter((r) => {
+            if (minScore !== null && r.sanitary_score < minScore) return false;
+            if (maxDistanceKm !== null) {
+                const d = haversineKm(center, { lat: r.lat, lng: r.lng });
+                if (d > maxDistanceKm) return false;
+            }
+            return true;
+        });
+    }, [restaurants, region.latitude, region.longitude, minScore, maxDistanceKm]);
+
+    const markers = useMemo(
+        () => buildMarkers(filteredRestaurants, region),
+        [filteredRestaurants, region.latitude, region.longitude, region.latitudeDelta, region.longitudeDelta]
+    );
 
     const restaurantsBySiret = useMemo(() => {
         const map = new Map<string, Restaurant>();
-        for (const r of restaurants) map.set(r.siret, r);
+        for (const r of filteredRestaurants) map.set(r.siret, r);
         return map;
-    }, [restaurants]);
+    }, [filteredRestaurants]);
 
     const selectedRestaurant = useMemo(() => {
         if (!selectedSiret) return null;
         return restaurantsBySiret.get(selectedSiret) ?? null;
     }, [restaurantsBySiret, selectedSiret]);
 
-    const listData = useMemo(() => restaurants.slice(0, 80), [restaurants]);
+    const listData = useMemo(() => filteredRestaurants.slice(0, 80), [filteredRestaurants]);
 
     useEffect(() => {
         trackEvent({ name: "screen_view", props: { screen: "Map" } });
@@ -166,6 +201,41 @@ export default function MapScreen({ navigation }: Props) {
             mapRef.current?.animateToRegion(next, 350);
         })();
     }, []);
+
+    const reverseCityFromLatLng = async (lat: number, lng: number): Promise<string | null> => {
+        const url = `https://api-adresse.data.gouv.fr/reverse/?lon=${encodeURIComponent(lng)}&lat=${encodeURIComponent(lat)}`;
+        try {
+            const res = await fetch(url);
+            if (!res.ok) return null;
+            const json: any = await res.json();
+            const city = json?.features?.[0]?.properties?.city;
+            return typeof city === "string" && city.trim() ? city.trim() : null;
+        } catch (e) {
+            captureError(e, { where: "MapScreen.reverseCityFromLatLng" });
+            return null;
+        }
+    };
+
+    const searchThisArea = async () => {
+        trackEvent({ name: "map_search_area" });
+        setLoading(true);
+        try {
+            const city = await reverseCityFromLatLng(region.latitude, region.longitude);
+            if (!city) {
+                Alert.alert("Recherche", "Impossible d’identifier la zone. Zoom un peu et réessaye.");
+                return;
+            }
+            const data = await fetchRestaurantsByCity(city);
+            setRestaurants(data);
+            setSelectedSiret(null);
+            trackEvent({ name: "map_search_area_results", props: { city, count: data.length } });
+        } catch (e) {
+            captureError(e, { where: "MapScreen.searchThisArea" });
+            Alert.alert("Erreur", "Impossible de charger les restaurants pour cette zone.");
+        } finally {
+            setLoading(false);
+        }
+    };
 
     const runSearch = async (raw: string) => {
         const q = raw.trim();
@@ -376,6 +446,25 @@ export default function MapScreen({ navigation }: Props) {
                     style={styles.input}
                     autoCapitalize="none"
                 />
+
+                <View style={styles.toolsRow}>
+                    <Pressable
+                        style={styles.toolBtn}
+                        onPress={() => {
+                            trackEvent({ name: "map_filters_open" });
+                            setFiltersOpen(true);
+                        }}
+                    >
+                        <Text style={styles.toolBtnText}>Filtres</Text>
+                    </Pressable>
+                    <Pressable
+                        style={styles.toolBtn}
+                        onPress={() => void searchThisArea()}
+                    >
+                        <Text style={styles.toolBtnText}>Rechercher ici</Text>
+                    </Pressable>
+                </View>
+
                 {citySearchUnavailable ? (
                     <Text style={styles.hint}>Recherche de villes indisponible (API).</Text>
                 ) : null}
@@ -413,7 +502,7 @@ export default function MapScreen({ navigation }: Props) {
             {listData.length > 1 && results.length === 0 ? (
                 <View style={styles.bottomPanel}>
                     <View style={styles.bottomHeader}>
-                        <Text style={styles.bottomTitle}>{restaurants.length} résultats</Text>
+                        <Text style={styles.bottomTitle}>{filteredRestaurants.length} résultats</Text>
                         {selectedRestaurant ? (
                             <Pressable onPress={() => void openRestaurant(selectedRestaurant, "list")} style={styles.openBtn}>
                                 <Text style={styles.openBtnText}>Ouvrir</Text>
@@ -499,6 +588,69 @@ export default function MapScreen({ navigation }: Props) {
                     </Pressable>
                 </Pressable>
             </Modal>
+
+            <Modal
+                visible={filtersOpen}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setFiltersOpen(false)}
+            >
+                <Pressable style={styles.filtersOverlay} onPress={() => setFiltersOpen(false)}>
+                    <Pressable style={styles.filtersCard} onPress={() => {}}>
+                        <View style={styles.filtersHeader}>
+                            <Text style={styles.filtersTitle}>Filtres</Text>
+                            <Pressable
+                                onPress={() => {
+                                    setMinScore(null);
+                                    setMaxDistanceKm(null);
+                                    trackEvent({ name: "map_filters_clear" });
+                                }}
+                            >
+                                <Text style={styles.filtersClear}>Réinitialiser</Text>
+                            </Pressable>
+                        </View>
+
+                        <Text style={styles.filtersLabel}>Score minimal</Text>
+                        <View style={styles.filtersChips}>
+                            {[null, 2, 3, 4].map((v) => {
+                                const active = minScore === v;
+                                const label = v === null ? "Tous" : `${v}+`;
+                                return (
+                                    <Pressable
+                                        key={`minscore-${String(v)}`}
+                                        style={[styles.chip, active ? styles.chipActive : null]}
+                                        onPress={() => setMinScore(v)}
+                                    >
+                                        <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>{label}</Text>
+                                    </Pressable>
+                                );
+                            })}
+                        </View>
+
+                        <Text style={styles.filtersLabel}>Distance max (depuis le centre)</Text>
+                        <View style={styles.filtersChips}>
+                            {[null, 5, 10, 25, 50, 100].map((v) => {
+                                const active = maxDistanceKm === v;
+                                const label = v === null ? "∞" : `${v} km`;
+                                return (
+                                    <Pressable
+                                        key={`maxdist-${String(v)}`}
+                                        style={[styles.chip, active ? styles.chipActive : null]}
+                                        onPress={() => setMaxDistanceKm(v)}
+                                    >
+                                        <Text style={[styles.chipText, active ? styles.chipTextActive : null]}>{label}</Text>
+                                    </Pressable>
+                                );
+                            })}
+                        </View>
+
+                        <View style={{ height: 8 }} />
+                        <Pressable style={styles.filtersCloseBtn} onPress={() => setFiltersOpen(false)}>
+                            <Text style={styles.filtersCloseText}>Fermer</Text>
+                        </Pressable>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </View>
     );
 }
@@ -531,6 +683,17 @@ const styles = StyleSheet.create({
         paddingHorizontal: 12,
         paddingVertical: 10
     },
+    toolsRow: {
+        flexDirection: "row",
+        gap: 8
+    },
+    toolBtn: {
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        borderRadius: 999,
+        backgroundColor: "rgba(0,0,0,0.06)"
+    },
+    toolBtnText: { fontWeight: "800" },
     hint: {
         color: "#666",
         fontSize: 12
@@ -628,5 +791,46 @@ const styles = StyleSheet.create({
     },
     moreItemText: {
         fontWeight: "700"
-    }
+    },
+
+    filtersOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.18)",
+        justifyContent: "center",
+        padding: 16
+    },
+    filtersCard: {
+        backgroundColor: "rgba(255,255,255,0.98)",
+        borderRadius: 14,
+        padding: 14
+    },
+    filtersHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: 10
+    },
+    filtersTitle: { fontWeight: "900", fontSize: 16 },
+    filtersClear: { fontWeight: "800", color: "#2563eb" },
+    filtersLabel: { fontWeight: "800", marginTop: 8, marginBottom: 6 },
+    filtersChips: { flexDirection: "row", flexWrap: "wrap", gap: 8 },
+    chip: {
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        borderRadius: 999,
+        backgroundColor: "rgba(0,0,0,0.06)"
+    },
+    chipActive: {
+        backgroundColor: "#111"
+    },
+    chipText: { fontWeight: "800" },
+    chipTextActive: { color: "#fff" },
+    filtersCloseBtn: {
+        marginTop: 10,
+        paddingVertical: 10,
+        borderRadius: 12,
+        alignItems: "center",
+        backgroundColor: "rgba(0,0,0,0.06)"
+    },
+    filtersCloseText: { fontWeight: "900" }
 });
