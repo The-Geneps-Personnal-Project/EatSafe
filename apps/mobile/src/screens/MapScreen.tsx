@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Pressable, Platform, StyleSheet, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Modal, Pressable, Platform, StyleSheet, Text, TextInput, View } from "react-native";
 import MapView, { Marker, Region } from "react-native-maps";
 import * as Location from "expo-location";
 import debounce from "lodash.debounce";
@@ -106,30 +106,7 @@ export default function MapScreen({ navigation }: Props) {
                     <Pressable
                         onPress={() => {
                             trackEvent({ name: "nav_open", props: { to: "MoreMenu", from: "Map" } });
-                            Alert.alert("Menu", undefined, [
-                                {
-                                    text: "Favoris",
-                                    onPress: () => {
-                                        trackEvent({ name: "nav_open", props: { to: "Bookmarks", from: "Map" } });
-                                        navigation.navigate("Bookmarks");
-                                    }
-                                },
-                                {
-                                    text: "Historique",
-                                    onPress: () => {
-                                        trackEvent({ name: "nav_open", props: { to: "Visited", from: "Map" } });
-                                        navigation.navigate("Visited");
-                                    }
-                                },
-                                {
-                                    text: "Listes",
-                                    onPress: () => {
-                                        trackEvent({ name: "nav_open", props: { to: "Lists", from: "Map" } });
-                                        navigation.navigate("Lists");
-                                    }
-                                },
-                                { text: "Annuler", style: "cancel" }
-                            ]);
+                            setMoreOpen(true);
                         }}
                         style={styles.headerBtn}
                         accessibilityRole="button"
@@ -150,6 +127,7 @@ export default function MapScreen({ navigation }: Props) {
     const [results, setResults] = useState<SearchItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [citySearchUnavailable, setCitySearchUnavailable] = useState(false);
+    const [moreOpen, setMoreOpen] = useState(false);
 
     const markers = useMemo(() => buildMarkers(restaurants, region), [restaurants, region.latitudeDelta, region.longitudeDelta]);
 
@@ -479,6 +457,48 @@ export default function MapScreen({ navigation }: Props) {
                     />
                 </View>
             ) : null}
+
+            <Modal
+                visible={moreOpen}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setMoreOpen(false)}
+            >
+                <Pressable style={styles.moreOverlay} onPress={() => setMoreOpen(false)}>
+                    <Pressable style={styles.morePopover} onPress={() => {}}>
+                        <Pressable
+                            style={styles.moreItem}
+                            onPress={() => {
+                                setMoreOpen(false);
+                                trackEvent({ name: "nav_open", props: { to: "Bookmarks", from: "Map" } });
+                                navigation.navigate("Bookmarks");
+                            }}
+                        >
+                            <Text style={styles.moreItemText}>Favoris</Text>
+                        </Pressable>
+                        <Pressable
+                            style={styles.moreItem}
+                            onPress={() => {
+                                setMoreOpen(false);
+                                trackEvent({ name: "nav_open", props: { to: "Visited", from: "Map" } });
+                                navigation.navigate("Visited");
+                            }}
+                        >
+                            <Text style={styles.moreItemText}>Historique</Text>
+                        </Pressable>
+                        <Pressable
+                            style={styles.moreItem}
+                            onPress={() => {
+                                setMoreOpen(false);
+                                trackEvent({ name: "nav_open", props: { to: "Lists", from: "Map" } });
+                                navigation.navigate("Lists");
+                            }}
+                        >
+                            <Text style={styles.moreItemText}>Listes</Text>
+                        </Pressable>
+                    </Pressable>
+                </Pressable>
+            </Modal>
         </View>
     );
 }
@@ -586,5 +606,27 @@ const styles = StyleSheet.create({
         borderRadius: 999
     },
     listTitle: { fontWeight: "800" },
-    listSub: { color: "#666", marginTop: 2, fontSize: 12 }
+    listSub: { color: "#666", marginTop: 2, fontSize: 12 },
+
+    moreOverlay: {
+        flex: 1,
+        backgroundColor: "rgba(0,0,0,0.08)",
+        alignItems: "flex-end",
+        justifyContent: "flex-start",
+        paddingTop: 56,
+        paddingRight: 12
+    },
+    morePopover: {
+        backgroundColor: "rgba(255,255,255,0.98)",
+        borderRadius: 12,
+        minWidth: 180,
+        overflow: "hidden"
+    },
+    moreItem: {
+        paddingVertical: 12,
+        paddingHorizontal: 14
+    },
+    moreItemText: {
+        fontWeight: "700"
+    }
 });
