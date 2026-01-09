@@ -1,0 +1,28 @@
+{
+    "name": "EatSafe",
+    "short_name": "EatSafe",
+    "start_url": "/",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#1976d2",
+    "icons": [
+        {
+            "src": "/eatsafe_logo_192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/eatsafe_logo_512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ],
+    "screenshots": [
+        {
+        "src": "/screenshot.png",
+        "sizes": "540x720",
+        "type": "image/png",
+        "form_factor": "wide"
+        }
+    ]
+}

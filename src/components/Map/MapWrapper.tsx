@@ -17,10 +17,13 @@ import OverlaySpinner from "@components/UI/Spinner/OverlaySpinner";
 import FilterBar from "@components/UI/SearchBar/FilterBar";
 import ContactModal from "@components/UI/SearchBar/ContactModal";
 import BuyMeACoffeeButton from "@components/UI/SearchBar/BuyMeACoffee";
+import AddToHomeScreenButton from "../UI/SearchBar/HomeScreenButton";
 import { useMapHandlers } from "@hooks/useMapHandler";
 import type { Restaurant } from "@schemas/restaurant";
 import type { FilterValues } from "@schemas/filter";
 import Toast from "@components/UI/Toast/Toast";
+import { Recommendation } from "@schemas/recommendation";
+import RecommendationChat from "@components/recommendation/RecommendationChat";
 import {
     fetchFilteredRestaurants,
     fetchRestaurantDetail,
@@ -30,7 +33,7 @@ import { MarkerClusterer } from "@googlemaps/markerclusterer";
 import { Option } from "@/types/search";
 import { usePlaceDetails } from "@/hooks/usePlaceDetails";
 
-const containerStyle = { width: "100%", height: "100vh" };
+const containerStyle = { width: "100%", height: "100vh"};
 const DEFAULT_CENTER = { lat: 46.603354, lng: 1.888334 };
 const googleLibraries: ("places")[] = ["places"];
 
@@ -69,12 +72,47 @@ export default function MapWrapper() {
 
     useEffect(() => {
         navigator.geolocation.getCurrentPosition(
-            ({ coords }) => {
-                setMapCenter({ lat: Number(coords.latitude), lng: Number(coords.longitude) });
+            async ({ coords }) => {
+                const lat = Number(coords.latitude);
+                const lng = Number(coords.longitude);
+
+                setMapCenter({ lat, lng });
+                setCurrentZoom(11);
                 setIsReady(true);
+
+                const geocoder = new window.google.maps.Geocoder();
+                geocoder.geocode({ location: { lat, lng } }, async (results, status) => {
+                    if (status === "OK" && results) {
+                        const postalCodeComponent = results
+                            .flatMap((r) => r.address_components)
+                            .find((c) => c.types.includes("postal_code"));
+
+                        const postalCode = postalCodeComponent?.long_name;
+
+                        if (postalCode) {
+                            let depCode = postalCode.substring(0, 2);
+
+                            if (depCode === "20") {
+                                depCode = "2A";
+                            }
+
+                            try {
+                                const restaurants = await fetchFilteredRestaurants({ dep_code: depCode });
+                                if (restaurants.length && mapRef.current) {
+                                    createNativeMarkers(mapRef.current, restaurants);
+                                } else {
+                                    showToast(`Aucun restaurant trouvé dans le département ${depCode}.`, "warning");
+                                }
+                            } catch {
+                                showToast("Erreur lors du chargement des restaurants à proximité.", "error");
+                            }
+                        }
+                    }
+                });
             },
             () => {
                 setMapCenter(DEFAULT_CENTER);
+                setCurrentZoom(6);
                 setIsReady(true);
             }
         );
@@ -102,6 +140,37 @@ export default function MapWrapper() {
         } catch (e) {
             showToast("Aucun résultat trouvé pour ce restaurant.", "error");
         }
+    };
+
+    const handleRecommendationResults = (recs: Recommendation[]) => {
+        if (!mapRef.current || !Array.isArray(recs) || !recs.length) return;
+
+        const toNum = (v: any) => (v === null || v === undefined ? NaN : Number(v));
+        const restaurants = recs
+            .map((r) => {
+                const lat = toNum((r as any).latitude ?? (r as any).lat);
+                const lng = toNum((r as any).longitude ?? (r as any).lng);
+                return {
+                    siret: (r as any).siret ?? (r as any).id ?? String(Math.random()),
+                    name: r.name,
+                    lat,
+                    lng,
+                    sanitary_score: toNum((r as any).hygiene_score ?? (r as any).local_score),
+                };
+            })
+            .filter((r) => Number.isFinite(r.lat) && Number.isFinite(r.lng));
+
+        if (!restaurants.length) {
+            showToast("Aucune coordonnée valide reçue des recommandations.", "warning");
+            return;
+        }
+
+        const bounds = new google.maps.LatLngBounds();
+        restaurants.forEach((r) => bounds.extend({ lat: r.lat, lng: r.lng }));
+
+        clearMarkers();
+        createNativeMarkers(mapRef.current, restaurants as any);
+        mapRef.current.fitBounds(bounds);
     };
 
     const clearMarkers = () => {
@@ -261,6 +330,7 @@ export default function MapWrapper() {
                         🎯 Filtres
                     </Button>
                     <BuyMeACoffeeButton fullWidth />
+                    <AddToHomeScreenButton fullWidth />
                     <Button variant="outlined" sx={{ bgcolor: "white" }} onClick={() => { setContactOpen(true); setMenuOpen(false); }}>
                         📬 Contact
                     </Button>
@@ -303,7 +373,7 @@ export default function MapWrapper() {
                 <GoogleMap
                     mapContainerStyle={containerStyle}
                     center={mapCenter}
-                    zoom={6}
+                    zoom={currentZoom}
                     onLoad={onMapLoad}
                     options={{
                         disableDefaultUI: true,
@@ -311,6 +381,23 @@ export default function MapWrapper() {
                         mapTypeControl: false,
                         streetViewControl: false,
                         fullscreenControl: false,
+                        styles: [
+                            {
+                                featureType: "all",
+                                elementType: "geometry",
+                                stylers: [{ visibility: "simplified" }],
+                            },
+                            {
+                                featureType: "poi",
+                                elementType: "labels",
+                                stylers: [{ visibility: "off" }],
+                            },
+                            {
+                                featureType: "road",
+                                elementType: "geometry",
+                                stylers: [{ visibility: "simplified" }],
+                            }
+                        ],
                     }}
                 />
             )}
@@ -332,6 +419,12 @@ export default function MapWrapper() {
             />
 
             {(searching && isReady) && <OverlaySpinner />}
+
+            <RecommendationChat
+                initialLatLng={mapCenter}
+                onResults={handleRecommendationResults}
+                limit={10}
+            />
         </LoadScript>
     );
 }

@@ -1,0 +1,41 @@
+{
+  "expo": {
+    "name": "EatSafe",
+    "slug": "eatsafe",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "scheme": "eatsafe",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "fr.adabin.eatsafe",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Votre position est utilisée pour afficher les restaurants autour de vous."
+      }
+    },
+    "android": {
+      "package": "fr.adabin.eatsafe",
+      "permissions": [
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": ["expo-sqlite"]
+  }
+}
