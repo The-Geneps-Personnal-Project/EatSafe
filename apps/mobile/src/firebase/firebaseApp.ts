@@ -22,9 +22,9 @@ export function initFirebase(): FirebaseInitResult {
     return {
       app: null,
       enabled: false,
-      reasonDisabled: `Firebase désactivé (variables manquantes: ${missing.join(
-        ", "
-      )})`,
+      reasonDisabled: __DEV__
+        ? `Firebase désactivé (variables manquantes: ${missing.join(", ")})`
+        : undefined,
     };
   }
 

@@ -23,7 +23,10 @@ export default function AuthScreen({ navigation, route }: Props) {
     const onSubmit = async () => {
         trackEvent({ name: "auth_submit", props: { mode } });
         if (!firebaseEnabled) {
-            Alert.alert("Configuration", firebaseDisabledReason ?? "Firebase n’est pas configuré.");
+            Alert.alert(
+                "Connexion",
+                __DEV__ ? firebaseDisabledReason ?? "Firebase n’est pas configuré." : "Connexion indisponible pour le moment."
+            );
             return;
         }
 

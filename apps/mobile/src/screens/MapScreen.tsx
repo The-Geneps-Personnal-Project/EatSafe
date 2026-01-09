@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Pressable, Platform, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Pressable, Platform, StyleSheet, Text, TextInput, View } from "react-native";
 import MapView, { Marker, Region } from "react-native-maps";
 import * as Location from "expo-location";
 import debounce from "lodash.debounce";
@@ -9,9 +9,7 @@ import type { RootStackParamList } from "../navigation/types";
 import type { Restaurant } from "../types/restaurant";
 import { fetchRestaurantsByCity, searchRestaurants } from "../services/restaurantService";
 import { searchCities } from "../services/geoService";
-import { registerForPushNotifications, sendPushTokenToBackend } from "../services/notificationsService";
 import { upsertMinimal } from "../storage/restaurantCache";
-import { getPushEnabled, setPushEnabled as persistPushEnabled } from "../features/notifications/pushPrefs";
 import { captureError, trackEvent } from "../telemetry/telemetry";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
@@ -144,7 +142,6 @@ export default function MapScreen({ navigation }: Props) {
     const [results, setResults] = useState<SearchItem[]>([]);
     const [loading, setLoading] = useState(false);
     const [citySearchUnavailable, setCitySearchUnavailable] = useState(false);
-    const [pushEnabled, setPushEnabled] = useState(false);
 
     const markers = useMemo(() => buildMarkers(restaurants, region), [restaurants, region.latitudeDelta, region.longitudeDelta]);
 
@@ -163,41 +160,7 @@ export default function MapScreen({ navigation }: Props) {
 
     useEffect(() => {
         trackEvent({ name: "screen_view", props: { screen: "Map" } });
-        void (async () => {
-            try {
-                const saved = await getPushEnabled();
-                setPushEnabled(saved);
-            } catch {
-                // ignore
-            }
-        })();
     }, []);
-
-    const togglePush = async (next: boolean) => {
-        setPushEnabled(next);
-        void persistPushEnabled(next);
-
-        trackEvent({ name: "push_toggle", props: { enabled: next } });
-        if (!next) return;
-
-        try {
-            const token = await registerForPushNotifications();
-            if (!token) {
-                setPushEnabled(false);
-                void persistPushEnabled(false);
-                trackEvent({ name: "push_register_failed", props: { reason: "no_token" } });
-                Alert.alert("Notifications", "Indisponible (permissions refusées ou simulateur). Essaye sur un téléphone.");
-                return;
-            }
-            await sendPushTokenToBackend(token);
-            trackEvent({ name: "push_register_success" });
-        } catch {
-            setPushEnabled(false);
-            void persistPushEnabled(false);
-            trackEvent({ name: "push_register_failed", props: { reason: "exception" } });
-            Alert.alert("Notifications", "Impossible d'activer les notifications pour le moment.");
-        }
-    };
 
     useEffect(() => {
         void (async () => {
@@ -420,11 +383,6 @@ export default function MapScreen({ navigation }: Props) {
             </MapView>
 
             <View style={styles.searchBox}>
-                <View style={styles.pushRow}>
-                    <Text style={styles.pushLabel}>Notifications</Text>
-                    <Switch value={pushEnabled} onValueChange={(v) => void togglePush(v)} />
-                </View>
-
                 <TextInput
                     value={query}
                     onChangeText={setQuery}
@@ -538,13 +496,6 @@ const styles = StyleSheet.create({
         padding: 10,
         gap: 8
     },
-    pushRow: {
-        flexDirection: "row",
-        alignItems: "center",
-        justifyContent: "space-between",
-        gap: 10
-    },
-    pushLabel: { fontWeight: "700" },
     input: {
         borderWidth: 1,
         borderColor: "#ddd",

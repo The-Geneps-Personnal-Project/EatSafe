@@ -57,7 +57,7 @@ export function AuthProvider({ children }: PropsWithChildren) {
       return unsub;
     } catch (e) {
       setFirebaseEnabled(false);
-      setFirebaseDisabledReason(toErrorMessage(e));
+      setFirebaseDisabledReason(__DEV__ ? toErrorMessage(e) : undefined);
       setUserState(null);
       return;
     }

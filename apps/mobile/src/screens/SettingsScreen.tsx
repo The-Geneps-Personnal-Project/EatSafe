@@ -59,7 +59,9 @@ export default function SettingsScreen({ navigation }: Props) {
         <Text style={styles.title}>Compte</Text>
         <Text style={styles.body}>Connecte-toi pour accéder à ton compte.</Text>
         {firebaseEnabled ? null : (
-          <Text style={styles.body}>Connexion indisponible: {firebaseDisabledReason ?? "—"}</Text>
+          <Text style={styles.body}>
+            Connexion indisponible{__DEV__ ? `: ${firebaseDisabledReason ?? "—"}` : ""}
+          </Text>
         )}
         <View style={{ height: 12 }} />
         <Button
