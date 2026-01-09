@@ -82,6 +82,8 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                     const r = await fetchRestaurantDetailByPublicId(publicId);
                     setRestaurant(r);
                     await upsertMinimal(r);
+                    setBookmarkedState(await isBookmarked(r.siret));
+                    setVisitedState(await isVisited(r.siret));
                     setMinimalOffline(null);
                     setLoading(false);
                     return;
@@ -174,21 +176,23 @@ export default function RestaurantScreen({ navigation, route }: Props) {
     const base = restaurant ?? minimalOffline;
     const sanitary = base?.sanitary_score ?? "—";
 
+    const activeSiret = restaurant?.siret ?? minimalOffline?.siret ?? siret;
+
     const toggleBookmark = async () => {
         if (isGuest) {
             navigation.navigate("Auth");
             return;
         }
 
-        if (!siret) return;
+        if (!activeSiret) return;
         const next = !bookmarked;
-        await setBookmarked(siret, next);
+        await setBookmarked(activeSiret, next);
         setBookmarkedState(next);
 
         if (next) {
             // Ensure we persist full details for offline if possible.
             try {
-                const r = restaurant ?? (await fetchRestaurantDetailBySiret(siret));
+                const r = restaurant ?? (await fetchRestaurantDetailBySiret(activeSiret));
                 setRestaurant(r);
                 setMinimalOffline(null);
                 await upsertFullForBookmark(r, true);
@@ -203,9 +207,9 @@ export default function RestaurantScreen({ navigation, route }: Props) {
             navigation.navigate("Auth");
             return;
         }
-        if (!siret) return;
+        if (!activeSiret) return;
         const next = !visited;
-        await setVisited(siret, next);
+        await setVisited(activeSiret, next);
         setVisitedState(next);
     };
 
