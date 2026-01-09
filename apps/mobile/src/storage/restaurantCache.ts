@@ -45,11 +45,12 @@ export async function upsertFullForBookmark(
   const db = await getDb();
   const now = Date.now();
 
+  const pinned = bookmarked;
   const detailsJson = bookmarked ? JSON.stringify(r) : null;
 
   await db.runAsync(
-    `INSERT INTO restaurant_cache (siret, public_id, name, address, city, sanitary_score, lat, lng, details_json, bookmarked, last_viewed_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO restaurant_cache (siret, public_id, name, address, city, sanitary_score, lat, lng, details_json, bookmarked, pinned, last_viewed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(siret) DO UPDATE SET
            public_id=excluded.public_id,
            name=excluded.name,
@@ -60,6 +61,7 @@ export async function upsertFullForBookmark(
            lng=excluded.lng,
            details_json=excluded.details_json,
            bookmarked=excluded.bookmarked,
+           pinned=excluded.pinned,
            last_viewed_at=excluded.last_viewed_at
         `,
     [
@@ -73,6 +75,7 @@ export async function upsertFullForBookmark(
       r.lng ?? null,
       detailsJson,
       bookmarked ? 1 : 0,
+      pinned ? 1 : 0,
       now,
     ]
   );
@@ -108,6 +111,7 @@ export type CachedMinimalRestaurant = {
   lat: number | null;
   lng: number | null;
   bookmarked: 0 | 1;
+  pinned: 0 | 1;
   last_viewed_at: number;
 };
 
@@ -117,11 +121,73 @@ export async function loadCachedMinimalBySiret(
   await migrateDb();
   const db = await getDb();
   const row = await db.getFirstAsync<CachedMinimalRestaurant>(
-    `SELECT siret, public_id, name, address, city, sanitary_score, lat, lng, bookmarked, last_viewed_at
+    `SELECT siret, public_id, name, address, city, sanitary_score, lat, lng, bookmarked, pinned, last_viewed_at
      FROM restaurant_cache WHERE siret = ? LIMIT 1`,
     [siret]
   );
   return row ?? null;
+}
+
+export async function upsertFullForPinned(
+  r: RestaurantDetails,
+  opts: { bookmarked: boolean; pinned: boolean }
+): Promise<void> {
+  await migrateDb();
+  const db = await getDb();
+  const now = Date.now();
+
+  const detailsJson = opts.bookmarked || opts.pinned ? JSON.stringify(r) : null;
+
+  await db.runAsync(
+    `INSERT INTO restaurant_cache (siret, public_id, name, address, city, sanitary_score, lat, lng, details_json, bookmarked, pinned, last_viewed_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(siret) DO UPDATE SET
+           public_id=excluded.public_id,
+           name=excluded.name,
+           address=excluded.address,
+           city=excluded.city,
+           sanitary_score=excluded.sanitary_score,
+           lat=excluded.lat,
+           lng=excluded.lng,
+           details_json=excluded.details_json,
+           bookmarked=excluded.bookmarked,
+           pinned=excluded.pinned,
+           last_viewed_at=excluded.last_viewed_at
+        `,
+    [
+      r.siret,
+      r.public_id ?? null,
+      r.name,
+      r.address,
+      r.city,
+      r.sanitary_score ?? null,
+      r.lat ?? null,
+      r.lng ?? null,
+      detailsJson,
+      opts.bookmarked ? 1 : 0,
+      opts.pinned ? 1 : 0,
+      now,
+    ]
+  );
+
+  await evictExpired();
+}
+
+export async function setPinnedForSiret(
+  siret: string,
+  pinned: boolean
+): Promise<void> {
+  await migrateDb();
+  const db = await getDb();
+
+  // If an item is not pinned and not bookmarked, we can drop full details to save space.
+  await db.runAsync(
+    `UPDATE restaurant_cache
+       SET pinned = ?,
+           details_json = CASE WHEN (bookmarked = 1 OR ? = 1) THEN details_json ELSE NULL END
+     WHERE siret = ?`,
+    [pinned ? 1 : 0, pinned ? 1 : 0, siret]
+  );
 }
 
 export async function evictExpired(): Promise<void> {
@@ -129,7 +195,7 @@ export async function evictExpired(): Promise<void> {
   const db = await getDb();
   const cutoff = Date.now() - TTL_MS;
   await db.runAsync(
-    `DELETE FROM restaurant_cache WHERE bookmarked = 0 AND last_viewed_at < ?`,
+    `DELETE FROM restaurant_cache WHERE bookmarked = 0 AND pinned = 0 AND last_viewed_at < ?`,
     [cutoff]
   );
 }

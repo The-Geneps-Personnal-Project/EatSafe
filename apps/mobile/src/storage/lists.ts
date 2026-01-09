@@ -77,6 +77,11 @@ export async function addRestaurantToList(
      ON CONFLICT(list_id, siret) DO UPDATE SET created_at=excluded.created_at`,
     [listId, siret, now]
   );
+
+  // Keep list items pinned so they don't expire from cache.
+  await db.runAsync(`UPDATE restaurant_cache SET pinned = 1 WHERE siret = ?`, [
+    siret,
+  ]);
 }
 
 export async function removeRestaurantFromList(
@@ -89,6 +94,21 @@ export async function removeRestaurantFromList(
     listId,
     siret,
   ]);
+
+  // If the restaurant is no longer in any list and not bookmarked, unpin it.
+  await db.runAsync(
+    `UPDATE restaurant_cache
+        SET pinned = CASE
+            WHEN bookmarked = 1 OR EXISTS(SELECT 1 FROM list_items WHERE siret = ? LIMIT 1) THEN 1
+            ELSE 0
+        END,
+        details_json = CASE
+            WHEN bookmarked = 1 OR EXISTS(SELECT 1 FROM list_items WHERE siret = ? LIMIT 1) THEN details_json
+            ELSE NULL
+        END
+      WHERE siret = ?`,
+    [siret, siret, siret]
+  );
 }
 
 export type ListItemRow = {

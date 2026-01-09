@@ -60,4 +60,22 @@ export async function migrateDb(): Promise<void> {
 
         CREATE INDEX IF NOT EXISTS idx_list_items_siret ON list_items (siret);
     `);
+
+  // Lightweight migration(s)
+  // (CREATE TABLE IF NOT EXISTS does not add new columns for existing users)
+  try {
+    await db.execAsync(
+      `ALTER TABLE restaurant_cache ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;`
+    );
+  } catch {
+    // ignore (likely already migrated)
+  }
+
+  try {
+    await db.execAsync(
+      `CREATE INDEX IF NOT EXISTS idx_restaurant_cache_pinned ON restaurant_cache (pinned);`
+    );
+  } catch {
+    // ignore
+  }
 }

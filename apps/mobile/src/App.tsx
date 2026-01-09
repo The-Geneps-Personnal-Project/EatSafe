@@ -11,6 +11,7 @@ import { AuthProvider } from "./auth/authState";
 import { TelemetryProvider } from "./telemetry/TelemetryProvider";
 import { PushRegistrationManager } from "./features/notifications/PushRegistrationManager";
 import { NotificationRouter } from "./features/notifications/NotificationRouter";
+import { PinnedDetailsSyncManager } from "./features/sync/PinnedDetailsSyncManager";
 
 export default function App() {
     return (
@@ -21,7 +22,9 @@ export default function App() {
                         <NavigationContainer linking={linking}>
                             <NotificationRouter />
                             <AuthProvider>
-                                <RootNavigator />
+                                <PinnedDetailsSyncManager>
+                                    <RootNavigator />
+                                </PinnedDetailsSyncManager>
                             </AuthProvider>
                         </NavigationContainer>
                     </PushRegistrationManager>
