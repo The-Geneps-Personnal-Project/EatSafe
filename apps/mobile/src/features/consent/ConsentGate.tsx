@@ -25,7 +25,7 @@ export function ConsentGate({ children }: PropsWithChildren) {
     if (!ready) return null;
 
     return (
-        <ConsentProvider consent={state}>
+        <ConsentProvider consent={state} setConsent={setState}>
             {children}
             <Modal visible={!state.decided} transparent animationType="fade">
                 <View style={styles.backdrop}>

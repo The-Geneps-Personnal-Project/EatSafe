@@ -4,6 +4,7 @@ import type { RootStackParamList } from "./types";
 import MapScreen from "../screens/MapScreen";
 import BookmarksScreen from "../screens/BookmarksScreen";
 import VisitedScreen from "../screens/VisitedScreen";
+import SettingsScreen from "../screens/SettingsScreen";
 import ListsScreen from "../screens/ListsScreen";
 import ListScreen from "../screens/ListScreen";
 import RestaurantScreen from "../screens/RestaurantScreen";
@@ -17,6 +18,7 @@ export function RootNavigator() {
             <Stack.Screen name="Map" component={MapScreen} options={{ title: "EatSafe" }} />
             <Stack.Screen name="Bookmarks" component={BookmarksScreen} options={{ title: "Favoris" }} />
             <Stack.Screen name="Visited" component={VisitedScreen} options={{ title: "Historique" }} />
+            <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: "Compte" }} />
             <Stack.Screen name="Lists" component={ListsScreen} options={{ title: "Listes" }} />
             <Stack.Screen name="List" component={ListScreen} options={{ title: "Liste" }} />
             <Stack.Screen name="Restaurant" component={RestaurantScreen} options={{ title: "Restaurant" }} />

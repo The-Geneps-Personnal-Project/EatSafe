@@ -88,6 +88,15 @@ export default function MapScreen({ navigation }: Props) {
                 <View style={styles.headerRow}>
                     <Pressable
                         onPress={() => {
+                            trackEvent({ name: "nav_open", props: { to: "Settings", from: "Map" } });
+                            navigation.navigate("Settings");
+                        }}
+                        style={styles.headerBtn}
+                    >
+                        <Text style={styles.headerBtnText}>Compte</Text>
+                    </Pressable>
+                    <Pressable
+                        onPress={() => {
                             trackEvent({ name: "nav_open", props: { to: "Bookmarks", from: "Map" } });
                             navigation.navigate("Bookmarks");
                         }}
