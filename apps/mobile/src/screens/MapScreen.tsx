@@ -11,6 +11,7 @@ import { fetchRestaurantsByCity, searchRestaurants } from "../services/restauran
 import { searchCities } from "../services/geoService";
 import { registerForPushNotifications, sendPushTokenToBackend } from "../services/notificationsService";
 import { upsertMinimal } from "../storage/restaurantCache";
+import { getPushEnabled, setPushEnabled as persistPushEnabled } from "../features/notifications/pushPrefs";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
 
@@ -46,20 +47,34 @@ export default function MapScreen({ navigation }: Props) {
     const [loading, setLoading] = useState(false);
     const [pushEnabled, setPushEnabled] = useState(false);
 
+    useEffect(() => {
+        void (async () => {
+            try {
+                const saved = await getPushEnabled();
+                setPushEnabled(saved);
+            } catch {
+                // ignore
+            }
+        })();
+    }, []);
+
     const togglePush = async (next: boolean) => {
         setPushEnabled(next);
+        void persistPushEnabled(next);
         if (!next) return;
 
         try {
             const token = await registerForPushNotifications();
             if (!token) {
                 setPushEnabled(false);
+                void persistPushEnabled(false);
                 Alert.alert("Notifications", "Indisponible (permissions refusées ou simulateur). Essaye sur un téléphone.");
                 return;
             }
             await sendPushTokenToBackend(token);
         } catch {
             setPushEnabled(false);
+            void persistPushEnabled(false);
             Alert.alert("Notifications", "Impossible d'activer les notifications pour le moment.");
         }
     };
