@@ -92,15 +92,52 @@ export default function MapScreen({ navigation }: Props) {
     useLayoutEffect(() => {
         navigation.setOptions({
             headerRight: () => (
-                <Pressable
-                    onPress={() => {
-                        trackEvent({ name: "nav_open", props: { to: "Settings", from: "Map" } });
-                        navigation.navigate("Settings");
-                    }}
-                    style={styles.headerBtn}
-                >
-                    <Text style={styles.headerBtnText}>Compte</Text>
-                </Pressable>
+                <View style={styles.headerRow}>
+                    <Pressable
+                        onPress={() => {
+                            trackEvent({ name: "nav_open", props: { to: "Settings", from: "Map" } });
+                            navigation.navigate("Settings");
+                        }}
+                        style={styles.headerBtn}
+                    >
+                        <Text style={styles.headerBtnText}>Compte</Text>
+                    </Pressable>
+
+                    <Pressable
+                        onPress={() => {
+                            trackEvent({ name: "nav_open", props: { to: "MoreMenu", from: "Map" } });
+                            Alert.alert("Menu", undefined, [
+                                {
+                                    text: "Favoris",
+                                    onPress: () => {
+                                        trackEvent({ name: "nav_open", props: { to: "Bookmarks", from: "Map" } });
+                                        navigation.navigate("Bookmarks");
+                                    }
+                                },
+                                {
+                                    text: "Historique",
+                                    onPress: () => {
+                                        trackEvent({ name: "nav_open", props: { to: "Visited", from: "Map" } });
+                                        navigation.navigate("Visited");
+                                    }
+                                },
+                                {
+                                    text: "Listes",
+                                    onPress: () => {
+                                        trackEvent({ name: "nav_open", props: { to: "Lists", from: "Map" } });
+                                        navigation.navigate("Lists");
+                                    }
+                                },
+                                { text: "Annuler", style: "cancel" }
+                            ]);
+                        }}
+                        style={styles.headerBtn}
+                        accessibilityRole="button"
+                        accessibilityLabel="Ouvrir le menu"
+                    >
+                        <Text style={styles.headerBtnText}>…</Text>
+                    </Pressable>
+                </View>
             )
         });
     }, [navigation]);
@@ -449,6 +486,7 @@ export default function MapScreen({ navigation }: Props) {
 const styles = StyleSheet.create({
     container: { flex: 1 },
     map: { flex: 1 },
+    headerRow: { flexDirection: "row", gap: 8 },
     headerBtn: {
         paddingHorizontal: 10,
         paddingVertical: 6,
