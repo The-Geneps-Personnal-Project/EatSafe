@@ -11,7 +11,7 @@ import { useNetwork } from "../hooks/useNetwork";
 import { isBookmarked, setBookmarked } from "../storage/bookmarks";
 import { isVisited, setVisited } from "../storage/visited";
 import { buildShareUrl, ensurePublicIdForSiret } from "../services/shareService";
-import { shareLink } from "../utils/share";
+import { copyText, shareLink } from "../utils/share";
 import { toErrorMessage } from "../utils/errors";
 import { captureError, trackEvent } from "../telemetry/telemetry";
 
@@ -42,6 +42,15 @@ export default function RestaurantScreen({ navigation, route }: Props) {
 
     const title = useMemo(() => restaurant?.name ?? "Restaurant", [restaurant?.name]);
 
+    const sharePreview = useMemo(() => {
+        const baseCity = (restaurant?.city ?? minimalOffline?.city ?? "").trim();
+        const sanitaryScore = restaurant?.sanitary_score ?? minimalOffline?.sanitary_score;
+        const lines: string[] = [title];
+        if (baseCity) lines.push(baseCity);
+        if (sanitaryScore !== null && sanitaryScore !== undefined) lines.push(`Score sanitaire: ${sanitaryScore}`);
+        return lines.join("\n");
+    }, [title, restaurant?.city, restaurant?.sanitary_score, minimalOffline?.city, minimalOffline?.sanitary_score]);
+
     useLayoutEffect(() => {
         navigation.setOptions({
             headerRight: () => (
@@ -57,7 +66,7 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                             try {
                                 const pid = publicId ?? (await ensurePublicIdForSiret(siret!));
                                 const url = buildShareUrl(pid);
-                                await shareLink(url, title);
+                                await shareLink(url, title, `${sharePreview}\n${url}`);
                                 trackEvent({ name: "restaurant_share_success" });
                             } catch (e) {
                                 captureError(e, { where: "RestaurantScreen.share" });
@@ -307,6 +316,33 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                             return;
                         }
                         navigation.navigate("Lists", { pickForSiret: activeSiret });
+                    }}
+                />
+
+                <View style={{ height: 10 }} />
+
+                <Button
+                    title="Copier le lien"
+                    onPress={() => {
+                        void (async () => {
+                            trackEvent({ name: "restaurant_copy_tap" });
+                            if (!siret && !publicId) {
+                                Alert.alert("Copier", "Restaurant non copiable.");
+                                return;
+                            }
+
+                            try {
+                                const pid = publicId ?? (await ensurePublicIdForSiret(siret!));
+                                const url = buildShareUrl(pid);
+                                await copyText(url);
+                                trackEvent({ name: "restaurant_copy_success" });
+                                Alert.alert("Copier", "Lien copié.");
+                            } catch (e) {
+                                captureError(e, { where: "RestaurantScreen.copy" });
+                                trackEvent({ name: "restaurant_copy_failed" });
+                                Alert.alert("Copier", toErrorMessage(e));
+                            }
+                        })();
                     }}
                 />
             </View>
