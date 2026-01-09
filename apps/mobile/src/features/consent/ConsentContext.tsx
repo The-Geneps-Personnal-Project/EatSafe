@@ -3,12 +3,13 @@ import type { ConsentState } from "./consentStorage";
 
 type ConsentContextValue = {
   consent: ConsentState;
+  setConsent: (next: ConsentState) => void;
 };
 
 const ConsentContext = createContext<ConsentContextValue | null>(null);
 
-export function ConsentProvider({ consent, children }: PropsWithChildren<{ consent: ConsentState }>) {
-  return <ConsentContext.Provider value={{ consent }}>{children}</ConsentContext.Provider>;
+export function ConsentProvider({ consent, setConsent, children }: PropsWithChildren<{ consent: ConsentState; setConsent: (next: ConsentState) => void }>) {
+  return <ConsentContext.Provider value={{ consent, setConsent }}>{children}</ConsentContext.Provider>;
 }
 
 export function useConsent() {

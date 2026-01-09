@@ -25,13 +25,16 @@ export async function setBookmarked(
       [siret, now]
     );
     await db.runAsync(
-      `UPDATE restaurant_cache SET bookmarked = 1 WHERE siret = ?`,
+      `UPDATE restaurant_cache SET bookmarked = 1, pinned = 1 WHERE siret = ?`,
       [siret]
     );
   } else {
     await db.runAsync(`DELETE FROM bookmarks WHERE siret = ?`, [siret]);
     await db.runAsync(
-      `UPDATE restaurant_cache SET bookmarked = 0, details_json = NULL WHERE siret = ?`,
+      `UPDATE restaurant_cache
+          SET bookmarked = 0,
+              details_json = CASE WHEN pinned = 1 THEN details_json ELSE NULL END
+        WHERE siret = ?`,
       [siret]
     );
   }

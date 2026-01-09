@@ -11,8 +11,9 @@ import { useNetwork } from "../hooks/useNetwork";
 import { isBookmarked, setBookmarked } from "../storage/bookmarks";
 import { isVisited, setVisited } from "../storage/visited";
 import { buildShareUrl, ensurePublicIdForSiret } from "../services/shareService";
-import { shareLink } from "../utils/share";
+import { copyText, shareLink } from "../utils/share";
 import { toErrorMessage } from "../utils/errors";
+import { captureError, trackEvent } from "../telemetry/telemetry";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Restaurant">;
 
@@ -26,6 +27,7 @@ export default function RestaurantScreen({ navigation, route }: Props) {
     const { isOnline } = useNetwork();
 
     const [loading, setLoading] = useState(true);
+    const [loadError, setLoadError] = useState<string | null>(null);
     const [restaurant, setRestaurant] = useState<RestaurantDetails | null>(null);
     const [minimalOffline, setMinimalOffline] = useState<{
         siret: string;
@@ -40,12 +42,22 @@ export default function RestaurantScreen({ navigation, route }: Props) {
 
     const title = useMemo(() => restaurant?.name ?? "Restaurant", [restaurant?.name]);
 
+    const sharePreview = useMemo(() => {
+        const baseCity = (restaurant?.city ?? minimalOffline?.city ?? "").trim();
+        const sanitaryScore = restaurant?.sanitary_score ?? minimalOffline?.sanitary_score;
+        const lines: string[] = [title];
+        if (baseCity) lines.push(baseCity);
+        if (sanitaryScore !== null && sanitaryScore !== undefined) lines.push(`Score sanitaire: ${sanitaryScore}`);
+        return lines.join("\n");
+    }, [title, restaurant?.city, restaurant?.sanitary_score, minimalOffline?.city, minimalOffline?.sanitary_score]);
+
     useLayoutEffect(() => {
         navigation.setOptions({
             headerRight: () => (
                 <TouchableOpacity
                     onPress={() => {
                         void (async () => {
+                            trackEvent({ name: "restaurant_share_tap" });
                             if (!siret && !publicId) {
                                 Alert.alert("Partager", "Restaurant non partageable.");
                                 return;
@@ -54,8 +66,11 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                             try {
                                 const pid = publicId ?? (await ensurePublicIdForSiret(siret!));
                                 const url = buildShareUrl(pid);
-                                await shareLink(url, title);
+                                await shareLink(url, title, `${sharePreview}\n${url}`);
+                                trackEvent({ name: "restaurant_share_success" });
                             } catch (e) {
+                                captureError(e, { where: "RestaurantScreen.share" });
+                                trackEvent({ name: "restaurant_share_failed" });
                                 Alert.alert("Partager", toErrorMessage(e));
                             }
                         })();
@@ -74,61 +89,80 @@ export default function RestaurantScreen({ navigation, route }: Props) {
     }, [navigation, title]);
 
     useEffect(() => {
-        void (async () => {
-            setLoading(true);
+        trackEvent({ name: "screen_view", props: { screen: "Restaurant" } });
+    }, []);
+
+    const load = async () => {
+        setLoading(true);
+        setLoadError(null);
+
+        try {
+            if (publicId) {
+                const r = await fetchRestaurantDetailByPublicId(publicId);
+                setRestaurant(r);
+                await upsertMinimal(r);
+                setBookmarkedState(await isBookmarked(r.siret));
+                setVisitedState(await isVisited(r.siret));
+                setMinimalOffline(null);
+
+                trackEvent({ name: "restaurant_load_success", props: { by: "publicId" } });
+                return;
+            }
+
+            if (!siret) {
+                setLoadError("Restaurant introuvable.");
+                return;
+            }
+
+            setBookmarkedState(await isBookmarked(siret));
+            setVisitedState(await isVisited(siret));
+
+            const cached = await loadCachedDetailsBySiret(siret);
+            if (cached) {
+                setRestaurant(cached);
+                setMinimalOffline(null);
+                trackEvent({ name: "restaurant_load_success", props: { by: "cache" } });
+                return;
+            }
 
             try {
-                if (publicId) {
-                    const r = await fetchRestaurantDetailByPublicId(publicId);
-                    setRestaurant(r);
-                    await upsertMinimal(r);
-                    setMinimalOffline(null);
-                    setLoading(false);
-                    return;
-                }
+                const r = await fetchRestaurantDetailBySiret(siret);
+                setRestaurant(r);
+                setMinimalOffline(null);
+                await upsertMinimal(r);
+                trackEvent({ name: "restaurant_load_success", props: { by: "siret" } });
+            } catch (e) {
+                const minimal = await loadCachedMinimalBySiret(siret);
+                if (minimal) {
+                    setRestaurant(null);
+                    setMinimalOffline({
+                        siret: minimal.siret,
+                        name: minimal.name,
+                        address: minimal.address,
+                        city: minimal.city,
+                        sanitary_score: minimal.sanitary_score,
+                    });
 
-                if (!siret) {
-                    setLoading(false);
-                    return;
+                    trackEvent({ name: "restaurant_load_partial_offline", props: { by: "cached_minimal" } });
+                } else {
+                    captureError(e, { where: "RestaurantScreen.load" });
+                    trackEvent({ name: "restaurant_load_failed", props: { by: "siret" } });
+                    setLoadError(toErrorMessage(e));
                 }
-
-                setBookmarkedState(await isBookmarked(siret));
-                setVisitedState(await isVisited(siret));
-
-                const cached = await loadCachedDetailsBySiret(siret);
-                if (cached) {
-                    setRestaurant(cached);
-                    setMinimalOffline(null);
-                    setLoading(false);
-                    return;
-                }
-
-                try {
-                    const r = await fetchRestaurantDetailBySiret(siret);
-                    setRestaurant(r);
-                    setMinimalOffline(null);
-                    await upsertMinimal(r);
-                } catch {
-                    const minimal = await loadCachedMinimalBySiret(siret);
-                    if (minimal) {
-                        setRestaurant(null);
-                        setMinimalOffline({
-                            siret: minimal.siret,
-                            name: minimal.name,
-                            address: minimal.address,
-                            city: minimal.city,
-                            sanitary_score: minimal.sanitary_score,
-                        });
-                    } else {
-                        throw new Error("no-cache");
-                    }
-                }
-            } catch (e: any) {
-                Alert.alert("Erreur", "Impossible de charger ce restaurant.");
-            } finally {
-                setLoading(false);
             }
-        })();
+        } catch (e: any) {
+            const msg = toErrorMessage(e);
+            setLoadError(msg);
+            captureError(e, { where: "RestaurantScreen.load.outer" });
+            trackEvent({ name: "restaurant_load_failed", props: { by: publicId ? "publicId" : (siret ? "siret" : "none") } });
+            Alert.alert("Erreur", msg);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        void load();
     }, [publicId, siret]);
 
     if (loading) {
@@ -142,7 +176,10 @@ export default function RestaurantScreen({ navigation, route }: Props) {
     if (!restaurant && !minimalOffline) {
         return (
             <View style={styles.center}>
-                <Text>Aucun restaurant.</Text>
+                <Text style={styles.errorTitle}>Impossible de charger</Text>
+                {loadError ? <Text style={styles.errorBody}>{loadError}</Text> : null}
+                <View style={{ height: 10 }} />
+                <Button title="Réessayer" onPress={() => void load()} />
             </View>
         );
     }
@@ -174,39 +211,48 @@ export default function RestaurantScreen({ navigation, route }: Props) {
     const base = restaurant ?? minimalOffline;
     const sanitary = base?.sanitary_score ?? "—";
 
+    const activeSiret = restaurant?.siret ?? minimalOffline?.siret ?? siret;
+
     const toggleBookmark = async () => {
         if (isGuest) {
+            trackEvent({ name: "guest_blocked_action", props: { action: "bookmark" } });
             navigation.navigate("Auth");
             return;
         }
 
-        if (!siret) return;
+        if (!activeSiret) return;
         const next = !bookmarked;
-        await setBookmarked(siret, next);
+        await setBookmarked(activeSiret, next);
         setBookmarkedState(next);
+
+        trackEvent({ name: "bookmark_toggle", props: { enabled: next } });
 
         if (next) {
             // Ensure we persist full details for offline if possible.
             try {
-                const r = restaurant ?? (await fetchRestaurantDetailBySiret(siret));
+                const r = restaurant ?? (await fetchRestaurantDetailBySiret(activeSiret));
                 setRestaurant(r);
                 setMinimalOffline(null);
                 await upsertFullForBookmark(r, true);
             } catch {
                 // If offline, we keep the bookmark flag and will fill details later.
+                trackEvent({ name: "bookmark_fill_failed" });
             }
         }
     };
 
     const toggleVisited = async () => {
         if (isGuest) {
+            trackEvent({ name: "guest_blocked_action", props: { action: "visited" } });
             navigation.navigate("Auth");
             return;
         }
-        if (!siret) return;
+        if (!activeSiret) return;
         const next = !visited;
-        await setVisited(siret, next);
+        await setVisited(activeSiret, next);
         setVisitedState(next);
+
+        trackEvent({ name: "visited_toggle", props: { enabled: next } });
     };
 
     return (
@@ -255,6 +301,50 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                         void toggleVisited();
                     }}
                 />
+
+                <View style={{ height: 10 }} />
+
+                <Button
+                    title={isGuest ? "Ajouter à une liste (compte requis)" : "Ajouter à une liste"}
+                    onPress={() => {
+                        if (isGuest) {
+                            navigation.navigate("Auth");
+                            return;
+                        }
+                        if (!activeSiret) {
+                            Alert.alert("Listes", "Restaurant introuvable.");
+                            return;
+                        }
+                        navigation.navigate("Lists", { pickForSiret: activeSiret });
+                    }}
+                />
+
+                <View style={{ height: 10 }} />
+
+                <Button
+                    title="Copier le lien"
+                    onPress={() => {
+                        void (async () => {
+                            trackEvent({ name: "restaurant_copy_tap" });
+                            if (!siret && !publicId) {
+                                Alert.alert("Copier", "Restaurant non copiable.");
+                                return;
+                            }
+
+                            try {
+                                const pid = publicId ?? (await ensurePublicIdForSiret(siret!));
+                                const url = buildShareUrl(pid);
+                                await copyText(url);
+                                trackEvent({ name: "restaurant_copy_success" });
+                                Alert.alert("Copier", "Lien copié.");
+                            } catch (e) {
+                                captureError(e, { where: "RestaurantScreen.copy" });
+                                trackEvent({ name: "restaurant_copy_failed" });
+                                Alert.alert("Copier", toErrorMessage(e));
+                            }
+                        })();
+                    }}
+                />
             </View>
         </ScrollView>
     );
@@ -263,6 +353,8 @@ export default function RestaurantScreen({ navigation, route }: Props) {
 const styles = StyleSheet.create({
     container: { padding: 16, gap: 10 },
     center: { flex: 1, alignItems: "center", justifyContent: "center" },
+    errorTitle: { fontSize: 16, fontWeight: "800" },
+    errorBody: { marginTop: 6, color: "#444", textAlign: "center" },
     name: { fontSize: 22, fontWeight: "800" },
     addr: { color: "#444" },
     score: { fontWeight: "700" },

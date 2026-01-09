@@ -42,5 +42,40 @@ export async function migrateDb(): Promise<void> {
           siret TEXT PRIMARY KEY NOT NULL,
           visited_at INTEGER NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS lists (
+          id INTEGER PRIMARY KEY NOT NULL,
+          name TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          UNIQUE(name)
+        );
+
+        CREATE TABLE IF NOT EXISTS list_items (
+          list_id INTEGER NOT NULL,
+          siret TEXT NOT NULL,
+          created_at INTEGER NOT NULL,
+          PRIMARY KEY (list_id, siret),
+          FOREIGN KEY (list_id) REFERENCES lists(id) ON DELETE CASCADE
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_list_items_siret ON list_items (siret);
     `);
+
+  // Lightweight migration(s)
+  // (CREATE TABLE IF NOT EXISTS does not add new columns for existing users)
+  try {
+    await db.execAsync(
+      `ALTER TABLE restaurant_cache ADD COLUMN pinned INTEGER NOT NULL DEFAULT 0;`
+    );
+  } catch {
+    // ignore (likely already migrated)
+  }
+
+  try {
+    await db.execAsync(
+      `CREATE INDEX IF NOT EXISTS idx_restaurant_cache_pinned ON restaurant_cache (pinned);`
+    );
+  } catch {
+    // ignore
+  }
 }
