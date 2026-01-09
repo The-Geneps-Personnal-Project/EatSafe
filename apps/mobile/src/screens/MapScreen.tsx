@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Pressable, StyleSheet, Switch, Text, TextInput, View } from "react-native";
+import { ActivityIndicator, Alert, FlatList, Pressable, Platform, StyleSheet, Switch, Text, TextInput, View } from "react-native";
 import MapView, { Marker, Region } from "react-native-maps";
 import * as Location from "expo-location";
 import debounce from "lodash.debounce";
@@ -30,6 +30,14 @@ const DEFAULT_REGION: Region = {
     latitudeDelta: 8,
     longitudeDelta: 8
 };
+
+// Google-only styling (Android by default; iOS only if you switch provider to Google).
+// Kept intentionally minimal: reduce POI/labels noise so markers are easier to read.
+const GOOGLE_MAP_STYLE: any[] = [
+    { featureType: "poi", stylers: [{ visibility: "off" }] },
+    { featureType: "transit", stylers: [{ visibility: "off" }] },
+    { featureType: "road", elementType: "labels.icon", stylers: [{ visibility: "off" }] }
+];
 
 function buildMarkers(restaurants: Restaurant[], region: Region): MapMarker[] {
     if (restaurants.length <= 25) return restaurants.map((r) => ({ kind: "restaurant" as const, restaurant: r }));
@@ -313,6 +321,14 @@ export default function MapScreen({ navigation }: Props) {
                 initialRegion={DEFAULT_REGION}
                 region={region}
                 onRegionChangeComplete={setRegion}
+                rotateEnabled={false}
+                pitchEnabled={false}
+                toolbarEnabled={false}
+                showsCompass={false}
+                showsUserLocation
+                showsMyLocationButton={Platform.OS === "android"}
+                showsPointsOfInterest={Platform.OS === "ios" ? false : undefined}
+                customMapStyle={GOOGLE_MAP_STYLE}
             >
                 {markers.map((m) => {
                     if (m.kind === "restaurant") {
