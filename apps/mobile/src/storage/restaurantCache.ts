@@ -199,3 +199,32 @@ export async function evictExpired(): Promise<void> {
     [cutoff]
   );
 }
+
+export async function listCachedForOfflineMap(
+  limit = 250
+): Promise<Restaurant[]> {
+  await migrateDb();
+  const db = await getDb();
+
+  const rows = await db.getAllAsync<CachedMinimalRestaurant>(
+    `SELECT siret, public_id, name, address, city, sanitary_score, lat, lng, bookmarked, pinned, last_viewed_at
+       FROM restaurant_cache
+      WHERE (bookmarked = 1 OR pinned = 1)
+        AND lat IS NOT NULL
+        AND lng IS NOT NULL
+      ORDER BY bookmarked DESC, pinned DESC, last_viewed_at DESC
+      LIMIT ?`,
+    [limit]
+  );
+
+  return (rows ?? []).map((r) => ({
+    siret: r.siret,
+    public_id: r.public_id ?? undefined,
+    name: r.name,
+    address: r.address,
+    city: r.city,
+    sanitary_score: (r.sanitary_score ?? NaN) as unknown as number,
+    lat: (r.lat ?? 0) as number,
+    lng: (r.lng ?? 0) as number,
+  }));
+}

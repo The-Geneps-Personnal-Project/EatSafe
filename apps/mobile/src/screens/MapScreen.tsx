@@ -10,7 +10,9 @@ import type { Restaurant } from "../types/restaurant";
 import { fetchRestaurantsByCity, searchRestaurants } from "../services/restaurantService";
 import { searchCities } from "../services/geoService";
 import { upsertMinimal } from "../storage/restaurantCache";
+import { listCachedForOfflineMap } from "../storage/restaurantCache";
 import { addSearchQuery, clearSearchQueries, listSearchQueries } from "../storage/searchHistory";
+import { useNetwork } from "../hooks/useNetwork";
 import { captureError, trackEvent } from "../telemetry/telemetry";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
@@ -92,6 +94,8 @@ function buildMarkers(restaurants: Restaurant[], region: Region): MapMarker[] {
 export default function MapScreen({ navigation }: Props) {
     const mapRef = useRef<MapView | null>(null);
     const listRef = useRef<FlatList<Restaurant> | null>(null);
+
+    const { isOnline } = useNetwork();
 
     useLayoutEffect(() => {
         navigation.setOptions({
@@ -383,6 +387,11 @@ export default function MapScreen({ navigation }: Props) {
         setRegion(next);
         mapRef.current?.animateToRegion(next, 350);
 
+        if (!isOnline) {
+            Alert.alert("Hors-ligne", "Impossible de charger une ville sans connexion. Utilise Favoris.");
+            return;
+        }
+
         setLoading(true);
         try {
             const data = await fetchRestaurantsByCity(city);
@@ -396,6 +405,59 @@ export default function MapScreen({ navigation }: Props) {
             setLoading(false);
         }
     };
+
+    const computeRegionForRestaurants = (items: Restaurant[]): Region | null => {
+        if (!items.length) return null;
+        let minLat = items[0]!.lat;
+        let maxLat = items[0]!.lat;
+        let minLng = items[0]!.lng;
+        let maxLng = items[0]!.lng;
+        for (const r of items) {
+            minLat = Math.min(minLat, r.lat);
+            maxLat = Math.max(maxLat, r.lat);
+            minLng = Math.min(minLng, r.lng);
+            maxLng = Math.max(maxLng, r.lng);
+        }
+        const centerLat = (minLat + maxLat) / 2;
+        const centerLng = (minLng + maxLng) / 2;
+        const latDelta = Math.max((maxLat - minLat) * 1.4, 0.08);
+        const lngDelta = Math.max((maxLng - minLng) * 1.4, 0.08);
+        return {
+            latitude: centerLat,
+            longitude: centerLng,
+            latitudeDelta: Math.min(latDelta, 8),
+            longitudeDelta: Math.min(lngDelta, 8)
+        };
+    };
+
+    const loadOfflinePinned = async (source: "auto" | "user") => {
+        trackEvent({ name: "offline_load_cached", props: { source } });
+        try {
+            const cached = await listCachedForOfflineMap(250);
+            if (!cached.length) {
+                if (source === "user") {
+                    Alert.alert("Favoris", "Aucun favoris/liste disponible hors-ligne.");
+                }
+                return;
+            }
+            setRestaurants(cached);
+            setSelectedSiret(null);
+            const next = computeRegionForRestaurants(cached);
+            if (next) {
+                setRegion(next);
+                mapRef.current?.animateToRegion(next, 350);
+            }
+        } catch (e) {
+            captureError(e, { where: "MapScreen.loadOfflinePinned" });
+            if (source === "user") Alert.alert("Favoris", "Impossible de charger le cache hors-ligne.");
+        }
+    };
+
+    useEffect(() => {
+        if (!isOnline && restaurants.length === 0) {
+            void loadOfflinePinned("auto");
+        }
+    }, [isOnline]);
 
     return (
         <View style={styles.container}>
@@ -460,6 +522,7 @@ export default function MapScreen({ navigation }: Props) {
             </MapView>
 
             <View style={styles.searchBox}>
+                {!isOnline ? <Text style={styles.offlinePill}>Hors-ligne</Text> : null}
                 <TextInput
                     value={query}
                     onChangeText={setQuery}
@@ -480,9 +543,22 @@ export default function MapScreen({ navigation }: Props) {
                     </Pressable>
                     <Pressable
                         style={styles.toolBtn}
-                        onPress={() => void searchThisArea()}
+                        onPress={() => {
+                            if (!isOnline) {
+                                Alert.alert("Hors-ligne", "Impossible de rechercher une zone sans connexion.");
+                                return;
+                            }
+                            void searchThisArea();
+                        }}
                     >
                         <Text style={styles.toolBtnText}>Rechercher ici</Text>
+                    </Pressable>
+
+                    <Pressable
+                        style={styles.toolBtn}
+                        onPress={() => void loadOfflinePinned("user")}
+                    >
+                        <Text style={styles.toolBtnText}>Favoris</Text>
                     </Pressable>
                 </View>
 
@@ -734,6 +810,14 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         padding: 10,
         gap: 8
+    },
+    offlinePill: {
+        alignSelf: "flex-start",
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 999,
+        backgroundColor: "rgba(0,0,0,0.06)",
+        fontWeight: "800"
     },
     input: {
         borderWidth: 1,
