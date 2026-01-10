@@ -19,7 +19,7 @@ export default function BookmarksScreen({ navigation }: Props) {
   }, []);
 
   useEffect(() => {
-    if (!isGuest) return;
+    if (!isGuest || __DEV__) return;
     trackEvent({ name: "guest_blocked_view", props: { screen: "Bookmarks" } });
   }, [isGuest]);
 
@@ -41,7 +41,7 @@ export default function BookmarksScreen({ navigation }: Props) {
     void refresh();
   }, [refresh]);
 
-  if (isGuest) {
+  if (isGuest && !__DEV__) {
     return (
       <View style={styles.center}>
         <Text style={styles.title}>Favoris</Text>

@@ -32,7 +32,7 @@ export default function ListScreen({ navigation, route }: Props) {
   const [items, setItems] = useState<ListItemRow[]>([]);
 
   useLayoutEffect(() => {
-    if (isGuest) {
+    if (isGuest && !__DEV__) {
       navigation.setOptions({ title: name, headerRight: undefined });
       return;
     }
@@ -91,7 +91,7 @@ export default function ListScreen({ navigation, route }: Props) {
     (it) => !it.name?.trim() || !it.address?.trim() || !it.city?.trim()
   );
 
-  if (isGuest) {
+  if (isGuest && !__DEV__) {
     return (
       <View style={styles.center}>
         <Text style={styles.title}>Liste</Text>

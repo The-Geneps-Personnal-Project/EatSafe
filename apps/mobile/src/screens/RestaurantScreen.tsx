@@ -256,7 +256,7 @@ export default function RestaurantScreen({ navigation, route }: Props) {
     };
 
     const openListsModal = async () => {
-        if (isGuest) {
+        if (isGuest && !__DEV__) {
             trackEvent({ name: "guest_blocked_action", props: { action: "lists" } });
             navigation.navigate("Auth");
             return;
@@ -327,7 +327,7 @@ export default function RestaurantScreen({ navigation, route }: Props) {
     };
 
     const toggleBookmark = async () => {
-        if (isGuest) {
+        if (isGuest && !__DEV__) {
             trackEvent({ name: "guest_blocked_action", props: { action: "bookmark" } });
             navigation.navigate("Auth");
             return;
@@ -358,7 +358,7 @@ export default function RestaurantScreen({ navigation, route }: Props) {
     };
 
     const toggleVisited = async () => {
-        if (isGuest) {
+        if (isGuest && !__DEV__) {
             trackEvent({ name: "guest_blocked_action", props: { action: "visited" } });
             navigation.navigate("Auth");
             return;
@@ -400,7 +400,7 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                 ) : null}
             </View>
 
-            {isGuest ? <RestrictedInfo /> : null}
+            {isGuest && !__DEV__ ? <RestrictedInfo /> : null}
 
             {restaurant?.opening_hours && !isGuest ? (
                 <View style={styles.section}>
@@ -478,7 +478,9 @@ export default function RestaurantScreen({ navigation, route }: Props) {
 
             <View style={styles.section}>
                 <Button
-                    title={isGuest ? "Favoris (compte requis)" : (bookmarked ? "Retirer des favoris" : "Ajouter aux favoris")}
+                    title={isGuest && __DEV__
+                        ? (bookmarked ? "Retirer des favoris (local dev)" : "Ajouter aux favoris (local dev)")
+                        : (isGuest ? "Favoris (compte requis)" : (bookmarked ? "Retirer des favoris" : "Ajouter aux favoris"))}
                     onPress={() => {
                         void toggleBookmark();
                     }}
@@ -487,7 +489,9 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                 <View style={{ height: 10 }} />
 
                 <Button
-                    title={isGuest ? "J’ai visité (compte requis)" : (visited ? "Visité ✅" : "J’ai visité")}
+                    title={isGuest && __DEV__
+                        ? (visited ? "Visité ✅ (local dev)" : "J’ai visité (local dev)")
+                        : (isGuest ? "J’ai visité (compte requis)" : (visited ? "Visité ✅" : "J’ai visité"))}
                     onPress={() => {
                         void toggleVisited();
                     }}
@@ -496,7 +500,7 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                 <View style={{ height: 10 }} />
 
                 <Button
-                    title={isGuest ? "Ajouter à une liste (compte requis)" : "Ajouter à une liste"}
+                    title={isGuest && __DEV__ ? "Ajouter à une liste (local dev)" : (isGuest ? "Ajouter à une liste (compte requis)" : "Ajouter à une liste")}
                     onPress={() => {
                         void openListsModal();
                     }}

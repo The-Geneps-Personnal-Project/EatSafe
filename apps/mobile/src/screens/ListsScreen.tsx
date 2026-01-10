@@ -114,7 +114,7 @@ export default function ListsScreen({ navigation, route }: Props) {
     );
   }, [loading]);
 
-  if (isGuest) {
+  if (isGuest && !__DEV__) {
     return (
       <View style={styles.center}>
         <Text style={styles.title}>Listes</Text>

@@ -30,7 +30,7 @@ export default function VisitedScreen({ navigation }: Props) {
   }, []);
 
   useEffect(() => {
-    if (!isGuest) return;
+    if (!isGuest || __DEV__) return;
     trackEvent({ name: "guest_blocked_view", props: { screen: "Visited" } });
   }, [isGuest]);
 
@@ -52,7 +52,7 @@ export default function VisitedScreen({ navigation }: Props) {
     void refresh();
   }, [refresh]);
 
-  if (isGuest) {
+  if (isGuest && !__DEV__) {
     return (
       <View style={styles.center}>
         <Text style={styles.title}>Historique</Text>

@@ -9,12 +9,17 @@ export type PublicIdResponse = {
 export async function ensurePublicIdForSiret(siret: string): Promise<string> {
   if (await shouldUseMockApi()) return await mockEnsurePublicIdForSiret(siret);
   // Backend to implement: POST /restaurants/public { siret }
-  const res = await http.post<PublicIdResponse>("/restaurants/public", {
-    siret,
-  });
-  const id = res.publicId ?? res.public_id;
-  if (!id) throw new Error("publicId manquant");
-  return id;
+  try {
+    const res = await http.post<PublicIdResponse>("/restaurants/public", {
+      siret,
+    });
+    const id = res.publicId ?? res.public_id;
+    if (!id) throw new Error("publicId manquant");
+    return id;
+  } catch (e) {
+    if (__DEV__) return await mockEnsurePublicIdForSiret(siret);
+    throw e;
+  }
 }
 
 export function buildShareUrl(publicId: string) {

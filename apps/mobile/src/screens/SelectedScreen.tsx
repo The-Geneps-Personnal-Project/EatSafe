@@ -49,7 +49,7 @@ export default function SelectedScreen({ navigation }: Props) {
     (it) => !it.name?.trim() || !it.address?.trim() || !it.city?.trim()
   );
 
-  if (isGuest) {
+  if (isGuest && !__DEV__) {
     return (
       <View style={styles.center}>
         <Text style={styles.title}>Sélectionnés</Text>

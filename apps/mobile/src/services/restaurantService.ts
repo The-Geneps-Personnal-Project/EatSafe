@@ -11,7 +11,12 @@ import {
 export async function searchRestaurants(query: string): Promise<Restaurant[]> {
   if (await shouldUseMockApi()) return await mockSearchRestaurants(query);
   const q = encodeURIComponent(query);
-  return await http.get<Restaurant[]>(`/restaurants/search?q=${q}`);
+  try {
+    return await http.get<Restaurant[]>(`/restaurants/search?q=${q}`);
+  } catch (e) {
+    if (__DEV__) return await mockSearchRestaurants(query);
+    throw e;
+  }
 }
 
 export async function fetchRestaurantDetailBySiret(
@@ -20,7 +25,12 @@ export async function fetchRestaurantDetailBySiret(
   if (await shouldUseMockApi())
     return await mockFetchRestaurantDetailBySiret(siret);
   const q = encodeURIComponent(siret);
-  return await http.get<RestaurantDetails>(`/restaurants/detail?siret=${q}`);
+  try {
+    return await http.get<RestaurantDetails>(`/restaurants/detail?siret=${q}`);
+  } catch (e) {
+    if (__DEV__) return await mockFetchRestaurantDetailBySiret(siret);
+    throw e;
+  }
 }
 
 export async function fetchRestaurantDetailByPublicId(
@@ -29,7 +39,12 @@ export async function fetchRestaurantDetailByPublicId(
   if (await shouldUseMockApi())
     return await mockFetchRestaurantDetailByPublicId(publicId);
   const q = encodeURIComponent(publicId);
-  return await http.get<RestaurantDetails>(`/restaurants/public/${q}`);
+  try {
+    return await http.get<RestaurantDetails>(`/restaurants/public/${q}`);
+  } catch (e) {
+    if (__DEV__) return await mockFetchRestaurantDetailByPublicId(publicId);
+    throw e;
+  }
 }
 
 export async function fetchRestaurantsByCity(
@@ -37,5 +52,10 @@ export async function fetchRestaurantsByCity(
 ): Promise<Restaurant[]> {
   if (await shouldUseMockApi()) return await mockFetchRestaurantsByCity(city);
   const q = encodeURIComponent(city);
-  return await http.get<Restaurant[]>(`/restaurants?city=${q}`);
+  try {
+    return await http.get<Restaurant[]>(`/restaurants?city=${q}`);
+  } catch (e) {
+    if (__DEV__) return await mockFetchRestaurantsByCity(city);
+    throw e;
+  }
 }
