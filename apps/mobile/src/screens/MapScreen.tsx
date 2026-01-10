@@ -1,16 +1,15 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { ActivityIndicator, Alert, FlatList, Modal, Pressable, Platform, StyleSheet, Text, TextInput, View } from "react-native";
-import MapView, { Marker, Region } from "react-native-maps";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { ActivityIndicator, Alert, FlatList, Keyboard, Modal, Pressable, Platform, StyleSheet, Text, TextInput, View } from "react-native";
+import MapView, { LatLng, Marker, Region } from "react-native-maps";
 import * as Location from "expo-location";
 import debounce from "lodash.debounce";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import type { RootStackParamList } from "../navigation/types";
 import type { Restaurant } from "../types/restaurant";
-import { fetchRestaurantsByCity, searchRestaurants } from "../services/restaurantService";
+import { fetchRestaurantDetailBySiret, fetchRestaurantsByCity, searchRestaurants } from "../services/restaurantService";
 import { searchCities } from "../services/geoService";
-import { upsertMinimal } from "../storage/restaurantCache";
-import { listCachedForOfflineMap, listCachedRecentlyViewedForMap } from "../storage/restaurantCache";
+import { listCachedForOfflineMap, listCachedRecentlyViewedForMap, loadCachedMinimalBySiret, upsertMinimal } from "../storage/restaurantCache";
 import { addSearchQuery, clearSearchQueries, listSearchQueries } from "../storage/searchHistory";
 import { useNetwork } from "../hooks/useNetwork";
 import { captureError, trackEvent } from "../telemetry/telemetry";
@@ -95,7 +94,7 @@ function buildMarkers(restaurants: Restaurant[], region: Region): MapMarker[] {
     return markers;
 }
 
-export default function MapScreen({ navigation }: Props) {
+export default function MapScreen({ navigation, route }: Props) {
     const mapRef = useRef<MapView | null>(null);
     const listRef = useRef<FlatList<Restaurant> | null>(null);
 
@@ -141,10 +140,16 @@ export default function MapScreen({ navigation }: Props) {
     const [loading, setLoading] = useState(false);
     const [citySearchUnavailable, setCitySearchUnavailable] = useState(false);
     const [moreOpen, setMoreOpen] = useState(false);
+    const [searchOpen, setSearchOpen] = useState(false);
 
     const [filtersOpen, setFiltersOpen] = useState(false);
     const [minScore, setMinScore] = useState<number | null>(null);
     const [maxDistanceKm, setMaxDistanceKm] = useState<number | null>(null);
+
+    const closeSearchPanel = useCallback(() => {
+        setSearchOpen(false);
+        Keyboard.dismiss();
+    }, []);
 
     const haversineKm = (a: { lat: number; lng: number }, b: { lat: number; lng: number }) => {
         const R = 6371;
@@ -190,17 +195,93 @@ export default function MapScreen({ navigation }: Props) {
     const listData = useMemo(() => filteredRestaurants.slice(0, 80), [filteredRestaurants]);
 
     useEffect(() => {
+        const focusSiret = route.params?.focusSiret;
+        if (!focusSiret) return;
+
+        void (async () => {
+            try {
+                // Focus should always show the pin; filters can otherwise hide it.
+                setMinScore(null);
+                setMaxDistanceKm(null);
+
+                trackEvent({ name: "map_focus_siret", props: { source: "list", has_current: restaurantsBySiret.has(focusSiret) } });
+
+                const existing = restaurantsBySiret.get(focusSiret);
+                if (existing) {
+                    selectOnMap(existing, "list");
+                    return;
+                }
+
+                const cached = await loadCachedMinimalBySiret(focusSiret);
+                if (cached && cached.lat !== null && cached.lng !== null) {
+                    const r: Restaurant = {
+                        siret: cached.siret,
+                        public_id: cached.public_id ?? undefined,
+                        name: cached.name?.trim() ? cached.name : "Restaurant",
+                        address: cached.address ?? "",
+                        city: cached.city ?? "",
+                        lat: cached.lat,
+                        lng: cached.lng,
+                        sanitary_score: cached.sanitary_score ?? 0,
+                    };
+
+                    setRestaurants((prev) => (prev.some((x) => x.siret === r.siret) ? prev : [r, ...prev]));
+                    setSelectedSiret(r.siret);
+
+                    const next: Region = {
+                        latitude: r.lat,
+                        longitude: r.lng,
+                        latitudeDelta: Math.min(region.latitudeDelta, 0.04),
+                        longitudeDelta: Math.min(region.longitudeDelta, 0.04)
+                    };
+                    setRegion(next);
+                    mapRef.current?.animateToRegion(next, 350);
+                    return;
+                }
+
+                const details = await fetchRestaurantDetailBySiret(focusSiret);
+                const r: Restaurant = {
+                    siret: details.siret,
+                    public_id: details.public_id,
+                    name: details.name,
+                    address: details.address,
+                    city: details.city,
+                    lat: details.lat,
+                    lng: details.lng,
+                    sanitary_score: details.sanitary_score,
+                };
+
+                try {
+                    await upsertMinimal(r);
+                } catch {
+                    // ignore
+                }
+
+                setRestaurants((prev) => (prev.some((x) => x.siret === r.siret) ? prev : [r, ...prev]));
+                selectOnMap(r, "list");
+            } catch (e) {
+                captureError(e, { where: "MapScreen.focusSiret" });
+                Alert.alert("Carte", "Impossible de localiser ce restaurant sur la carte.");
+            } finally {
+                navigation.setParams({ focusSiret: undefined });
+            }
+        })();
+        // We intentionally only react to param changes.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [route.params?.focusSiret]);
+
+    useEffect(() => {
         trackEvent({ name: "screen_view", props: { screen: "Map" } });
     }, []);
 
-    const refreshRecent = async () => {
+    const refreshRecent = useCallback(async () => {
         try {
             const rows = await listSearchQueries(10);
             setRecentQueries(rows.map((r) => r.query));
         } catch (e) {
             captureError(e, { where: "MapScreen.refreshRecent" });
         }
-    };
+    }, []);
 
     useEffect(() => {
         void refreshRecent();
@@ -260,7 +341,7 @@ export default function MapScreen({ navigation }: Props) {
         }
     };
 
-    const runSearch = async (raw: string) => {
+    const runSearch = useCallback(async (raw: string) => {
         const q = raw.trim();
         if (q.length < 2) {
             setResults([]);
@@ -346,9 +427,9 @@ export default function MapScreen({ navigation }: Props) {
         } finally {
             setLoading(false);
         }
-    };
+    }, [isOnline, refreshRecent]);
 
-    const debounced = useMemo(() => debounce(runSearch, 350), []);
+    const debounced = useMemo(() => debounce(runSearch, 350), [runSearch]);
 
     useEffect(() => {
         debounced(query);
@@ -433,17 +514,21 @@ export default function MapScreen({ navigation }: Props) {
         }
     };
 
-    const computeRegionForRestaurants = (items: Restaurant[]): Region | null => {
-        if (!items.length) return null;
-        let minLat = items[0]!.lat;
-        let maxLat = items[0]!.lat;
-        let minLng = items[0]!.lng;
-        let maxLng = items[0]!.lng;
-        for (const r of items) {
-            minLat = Math.min(minLat, r.lat);
-            maxLat = Math.max(maxLat, r.lat);
-            minLng = Math.min(minLng, r.lng);
-            maxLng = Math.max(maxLng, r.lng);
+    function computeRegionForRestaurants(items: Restaurant[]): Region | null {
+        const coords = items
+            .map((r) => ({ lat: r.lat, lng: r.lng }))
+            .filter((c) => Number.isFinite(c.lat) && Number.isFinite(c.lng));
+        if (!coords.length) return null;
+
+        let minLat = coords[0]!.lat;
+        let maxLat = coords[0]!.lat;
+        let minLng = coords[0]!.lng;
+        let maxLng = coords[0]!.lng;
+        for (const c of coords) {
+            minLat = Math.min(minLat, c.lat);
+            maxLat = Math.max(maxLat, c.lat);
+            minLng = Math.min(minLng, c.lng);
+            maxLng = Math.max(maxLng, c.lng);
         }
         const centerLat = (minLat + maxLat) / 2;
         const centerLng = (minLng + maxLng) / 2;
@@ -455,7 +540,127 @@ export default function MapScreen({ navigation }: Props) {
             latitudeDelta: Math.min(latDelta, 8),
             longitudeDelta: Math.min(lngDelta, 8)
         };
-    };
+    }
+
+    useEffect(() => {
+        const focusSirets = route.params?.focusSirets;
+        if (!focusSirets || focusSirets.length === 0) return;
+
+        void (async () => {
+            try {
+                // Focus should always show the pins; filters can otherwise hide them.
+                setMinScore(null);
+                setMaxDistanceKm(null);
+
+                const unique = Array.from(new Set(focusSirets)).filter(Boolean);
+                trackEvent({ name: "map_focus_sirets", props: { source: "list", count: unique.length } });
+
+                const existingBySiret = new Map<string, Restaurant>();
+                for (const r of restaurants) existingBySiret.set(r.siret, r);
+
+                const focus: Restaurant[] = [];
+                const missing: string[] = [];
+                for (const siret of unique) {
+                    const ex = existingBySiret.get(siret);
+                    if (ex) focus.push(ex);
+                    else missing.push(siret);
+                }
+
+                if (missing.length) {
+                    const cachedRows = await Promise.all(missing.map((s) => loadCachedMinimalBySiret(s)));
+                    const stillMissing: string[] = [];
+                    for (let i = 0; i < cachedRows.length; i++) {
+                        const cached = cachedRows[i];
+                        const siret = missing[i]!;
+                        if (cached && cached.lat !== null && cached.lng !== null) {
+                            focus.push({
+                                siret: cached.siret,
+                                public_id: cached.public_id ?? undefined,
+                                name: cached.name?.trim() ? cached.name : "Restaurant",
+                                address: cached.address ?? "",
+                                city: cached.city ?? "",
+                                lat: cached.lat,
+                                lng: cached.lng,
+                                sanitary_score: cached.sanitary_score ?? 0
+                            });
+                        } else {
+                            stillMissing.push(siret);
+                        }
+                    }
+
+                    if (stillMissing.length && isOnline) {
+                        // Safety cap to avoid excessive network calls on huge lists.
+                        const toFetch = stillMissing.slice(0, 30);
+                        for (const siret of toFetch) {
+                            try {
+                                const details = await fetchRestaurantDetailBySiret(siret);
+                                const r: Restaurant = {
+                                    siret: details.siret,
+                                    public_id: details.public_id,
+                                    name: details.name,
+                                    address: details.address,
+                                    city: details.city,
+                                    lat: details.lat,
+                                    lng: details.lng,
+                                    sanitary_score: details.sanitary_score
+                                };
+                                try {
+                                    await upsertMinimal(r);
+                                } catch {
+                                    // ignore
+                                }
+                                focus.push(r);
+                            } catch {
+                                // ignore individual failures
+                            }
+                        }
+                    }
+                }
+
+                if (!focus.length) {
+                    Alert.alert("Carte", "Aucun restaurant de cette liste n’a de position disponible.");
+                    return;
+                }
+
+                setRestaurants((prev) => {
+                    const map = new Map<string, Restaurant>();
+                    for (const r of prev) map.set(r.siret, r);
+                    for (const r of focus) map.set(r.siret, r);
+                    return Array.from(map.values());
+                });
+                setSelectedSiret(null);
+
+                const next = computeRegionForRestaurants(focus);
+                if (next) {
+                    setRegion(next);
+                    mapRef.current?.animateToRegion(next, 350);
+                }
+
+                const coords: LatLng[] = focus
+                    .map((r) => ({ latitude: r.lat, longitude: r.lng }))
+                    .filter(
+                        (c) =>
+                            Number.isFinite(c.latitude) &&
+                            Number.isFinite(c.longitude)
+                    );
+
+                if (coords.length) {
+                    // More reliable than animateToRegion to ensure everything is visible.
+                    mapRef.current?.fitToCoordinates(coords, {
+                        edgePadding: { top: 90, right: 50, bottom: 340, left: 50 },
+                        animated: true
+                    });
+                }
+            } catch (e) {
+                captureError(e, { where: "MapScreen.focusSirets" });
+                Alert.alert("Carte", "Impossible d’afficher cette liste sur la carte.");
+            } finally {
+                navigation.setParams({ focusSirets: undefined });
+            }
+        })();
+        // We intentionally only react to param changes.
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [route.params?.focusSirets]);
 
     const loadOfflinePinned = async (source: "auto" | "user") => {
         trackEvent({ name: "offline_load_cached", props: { source } });
@@ -525,6 +730,12 @@ export default function MapScreen({ navigation }: Props) {
                 showsMyLocationButton={Platform.OS === "android"}
                 showsPointsOfInterest={Platform.OS === "ios" ? false : undefined}
                 customMapStyle={GOOGLE_MAP_STYLE}
+                onPress={() => {
+                    if (searchOpen) closeSearchPanel();
+                }}
+                onPanDrag={() => {
+                    if (searchOpen) closeSearchPanel();
+                }}
             >
                 {markers.map((m) => {
                     if (m.kind === "restaurant") {
@@ -573,16 +784,22 @@ export default function MapScreen({ navigation }: Props) {
                 {!isOnline ? <Text style={styles.offlinePill}>Hors-ligne</Text> : null}
                 <TextInput
                     value={query}
-                    onChangeText={setQuery}
+                    onChangeText={(t) => {
+                        setQuery(t);
+                        if (!searchOpen) setSearchOpen(true);
+                    }}
                     placeholder="Rechercher un restaurant ou une ville"
                     style={styles.input}
                     autoCapitalize="none"
+                    onFocus={() => setSearchOpen(true)}
+                    onBlur={() => setSearchOpen(false)}
                 />
 
                 <View style={styles.toolsRow}>
                     <Pressable
                         style={styles.toolBtn}
                         onPress={() => {
+                            closeSearchPanel();
                             trackEvent({ name: "map_filters_open" });
                             setFiltersOpen(true);
                         }}
@@ -592,6 +809,7 @@ export default function MapScreen({ navigation }: Props) {
                     <Pressable
                         style={styles.toolBtn}
                         onPress={() => {
+                            closeSearchPanel();
                             if (!isOnline) {
                                 Alert.alert("Hors-ligne", "Impossible de rechercher une zone sans connexion.");
                                 return;
@@ -604,25 +822,31 @@ export default function MapScreen({ navigation }: Props) {
 
                     <Pressable
                         style={styles.toolBtn}
-                        onPress={() => void loadOfflinePinned("user")}
+                        onPress={() => {
+                            closeSearchPanel();
+                            void loadOfflinePinned("user");
+                        }}
                     >
                         <Text style={styles.toolBtnText}>Favoris</Text>
                     </Pressable>
 
                     <Pressable
                         style={styles.toolBtn}
-                        onPress={() => void loadOfflineRecent()}
+                        onPress={() => {
+                            closeSearchPanel();
+                            void loadOfflineRecent();
+                        }}
                     >
                         <Text style={styles.toolBtnText}>Récents</Text>
                     </Pressable>
                 </View>
 
-                {citySearchUnavailable ? (
+                {searchOpen && citySearchUnavailable ? (
                     <Text style={styles.hint}>Recherche de villes indisponible (API).</Text>
                 ) : null}
-                {loading && <ActivityIndicator />}
+                {searchOpen && loading && <ActivityIndicator />}
 
-                {results.length === 0 && query.trim().length === 0 && recentQueries.length > 0 ? (
+                {searchOpen && results.length === 0 && query.trim().length === 0 && recentQueries.length > 0 ? (
                     <View style={styles.results}>
                         <View style={styles.recentHeaderRow}>
                             <Text style={styles.recentTitle}>Recherches récentes</Text>
@@ -660,7 +884,7 @@ export default function MapScreen({ navigation }: Props) {
                     </View>
                 ) : null}
 
-                {results.length > 0 && (
+                {searchOpen && results.length > 0 && (
                     <View style={styles.results}>
                         <FlatList
                             keyboardShouldPersistTaps="handled"
@@ -669,16 +893,44 @@ export default function MapScreen({ navigation }: Props) {
                             renderItem={({ item }) => {
                                 if (item.kind === "restaurant") {
                                     const r = item.restaurant;
+                                    const primaryType = r.types?.[0];
+                                    const typeLabel = primaryType
+                                        ? primaryType.replace(/_/g, " ").replace(/^\w/, (c) => c.toUpperCase())
+                                        : "—";
+                                    const score = r.sanitary_score;
+                                    const scoreBg = getScoreColor(score);
                                     return (
-                                        <Pressable onPress={() => void selectRestaurantFromSearch(r)} style={styles.row}>
-                                            <Text style={styles.rowTitle}>{r.name}</Text>
-                                            <Text style={styles.rowSub}>{r.address}, {r.city}</Text>
+                                        <Pressable
+                                            onPress={() => {
+                                                closeSearchPanel();
+                                                void selectRestaurantFromSearch(r);
+                                            }}
+                                            style={styles.row}
+                                        >
+                                            <View style={styles.searchRowContent}>
+                                                <View style={{ flex: 1, paddingRight: 10 }}>
+                                                    <Text style={styles.rowTitle} numberOfLines={1}>{r.name}</Text>
+                                                    <Text style={styles.rowSub} numberOfLines={1}>{r.city}</Text>
+                                                </View>
+                                                <View style={styles.searchRowRight}>
+                                                    <View style={[styles.scoreBadge, { backgroundColor: scoreBg }]}>
+                                                        <Text style={styles.scoreBadgeText}>{score}</Text>
+                                                    </View>
+                                                    <Text style={styles.typeText} numberOfLines={1}>{typeLabel}</Text>
+                                                </View>
+                                            </View>
                                         </Pressable>
                                     );
                                 }
 
                                 return (
-                                    <Pressable onPress={() => void selectCity(item.city, item.lat, item.lng)} style={styles.row}>
+                                    <Pressable
+                                        onPress={() => {
+                                            closeSearchPanel();
+                                            void selectCity(item.city, item.lat, item.lng);
+                                        }}
+                                        style={styles.row}
+                                    >
                                         <Text style={styles.rowTitle}>{item.city}</Text>
                                         <Text style={styles.rowSub}>Ville</Text>
                                     </Pressable>
@@ -689,7 +941,7 @@ export default function MapScreen({ navigation }: Props) {
                 )}
             </View>
 
-            {listData.length > 1 && results.length === 0 ? (
+            {listData.length > 1 && !searchOpen ? (
                 <View style={styles.bottomPanel}>
                     <View style={styles.bottomHeader}>
                         <Text style={styles.bottomTitle}>{filteredRestaurants.length} résultats</Text>
@@ -920,6 +1172,33 @@ const styles = StyleSheet.create({
     row: {
         paddingVertical: 10,
         paddingHorizontal: 6
+    },
+    searchRowContent: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between"
+    },
+    searchRowRight: {
+        alignItems: "flex-end",
+        justifyContent: "center",
+        gap: 4
+    },
+    scoreBadge: {
+        minWidth: 28,
+        height: 22,
+        borderRadius: 999,
+        paddingHorizontal: 8,
+        alignItems: "center",
+        justifyContent: "center"
+    },
+    scoreBadgeText: {
+        color: "#fff",
+        fontWeight: "900"
+    },
+    typeText: {
+        color: "#666",
+        fontSize: 12,
+        fontWeight: "700"
     },
     rowTitle: { fontWeight: "700" },
     rowSub: { color: "#666", marginTop: 2 },

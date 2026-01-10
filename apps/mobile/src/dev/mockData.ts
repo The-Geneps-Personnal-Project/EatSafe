@@ -1,3 +1,4 @@
+import type { CityHit } from "../types/city";
 import type { Restaurant, RestaurantDetails } from "../types/restaurant";
 
 type MockRestaurant = Restaurant & { public_id: string };
@@ -21,6 +22,7 @@ const base: Array<{
   address: string;
   city: string;
   sanitary_score: number;
+  types?: string[];
 }> = [
   {
     siret: "11111111111111",
@@ -30,6 +32,7 @@ const base: Array<{
     address: "12 Quai de Jemmapes",
     city: "Paris",
     sanitary_score: 3,
+    types: ["bistro", "restaurant"],
   },
   {
     siret: "22222222222222",
@@ -39,6 +42,7 @@ const base: Array<{
     address: "5 Rue de la République",
     city: "Lyon",
     sanitary_score: 2,
+    types: ["french_restaurant", "restaurant"],
   },
   {
     siret: "33333333333333",
@@ -48,6 +52,7 @@ const base: Array<{
     address: "18 Rue Sainte",
     city: "Marseille",
     sanitary_score: 4,
+    types: ["italian_restaurant", "restaurant"],
   },
   {
     siret: "44444444444444",
@@ -57,6 +62,7 @@ const base: Array<{
     address: "3 Allées Jean Jaurès",
     city: "Toulouse",
     sanitary_score: 2,
+    types: ["brasserie", "restaurant"],
   },
   {
     siret: "55555555555555",
@@ -66,6 +72,7 @@ const base: Array<{
     address: "9 Rue Crébillon",
     city: "Nantes",
     sanitary_score: 3,
+    types: ["sushi", "japanese_restaurant"],
   },
   {
     siret: "66666666666666",
@@ -75,6 +82,7 @@ const base: Array<{
     address: "20 Rue de Béthune",
     city: "Lille",
     sanitary_score: 1,
+    types: ["restaurant"],
   },
   {
     siret: "77777777777777",
@@ -84,6 +92,7 @@ const base: Array<{
     address: "2 Avenue Jean Médecin",
     city: "Nice",
     sanitary_score: 2,
+    types: ["cafe", "restaurant"],
   },
   {
     siret: "88888888888888",
@@ -93,6 +102,7 @@ const base: Array<{
     address: "7 Rue de la Loge",
     city: "Montpellier",
     sanitary_score: 3,
+    types: ["restaurant"],
   },
   {
     siret: "99999999999999",
@@ -102,6 +112,7 @@ const base: Array<{
     address: "4 Rue des Grandes Arcades",
     city: "Strasbourg",
     sanitary_score: 4,
+    types: ["italian_restaurant", "restaurant"],
   },
   {
     siret: "10101010101010",
@@ -111,10 +122,133 @@ const base: Array<{
     address: "10 Place Sainte-Anne",
     city: "Rennes",
     sanitary_score: 2,
+    types: ["creperie", "restaurant"],
   },
 ];
 
-export const mockRestaurants: MockRestaurant[] = base.map((r) => ({
+const majorCities: Array<{ city: string; lat: number; lng: number }> = [
+  { city: "Paris", lat: 48.8566, lng: 2.3522 },
+  { city: "Marseille", lat: 43.2965, lng: 5.3698 },
+  { city: "Lyon", lat: 45.764, lng: 4.8357 },
+  { city: "Toulouse", lat: 43.6047, lng: 1.4442 },
+  { city: "Nice", lat: 43.7102, lng: 7.262 },
+  { city: "Nantes", lat: 47.2184, lng: -1.5536 },
+  { city: "Montpellier", lat: 43.6119, lng: 3.8772 },
+  { city: "Strasbourg", lat: 48.5734, lng: 7.7521 },
+  { city: "Bordeaux", lat: 44.8378, lng: -0.5792 },
+  { city: "Lille", lat: 50.6292, lng: 3.0573 },
+  { city: "Rennes", lat: 48.1173, lng: -1.6778 },
+];
+
+export const mockCities: CityHit[] = majorCities.map((c) => ({
+  label: c.city,
+  city: c.city,
+  lat: c.lat,
+  lng: c.lng,
+}));
+
+function makeSiret(cityIndex: number, idx: number): string {
+  // Deterministic fake SIRET (14 digits) within JS safe integer range.
+  const n = 70000000000000 + cityIndex * 100 + idx;
+  return String(n).padStart(14, "0");
+}
+
+function generateRestaurantsForCity(
+  cityIndex: number,
+  city: string,
+  center: { lat: number; lng: number },
+  count: number
+): Array<{
+  siret: string;
+  name: string;
+  lat: number;
+  lng: number;
+  address: string;
+  city: string;
+  sanitary_score: number;
+  types?: string[];
+}> {
+  const streetNames = [
+    "Rue de la République",
+    "Rue Victor Hugo",
+    "Avenue de la Gare",
+    "Rue Nationale",
+    "Boulevard des Arts",
+    "Rue des Lilas",
+    "Avenue du Marché",
+    "Rue du Port",
+    "Rue des Écoles",
+    "Place Centrale",
+  ];
+
+  const kinds = [
+    "Bistrot",
+    "Brasserie",
+    "Café",
+    "Cantine",
+    "Table",
+    "Cuisine",
+    "Comptoir",
+    "Atelier",
+    "Maison",
+    "Restaurant",
+  ];
+
+  const kindToType: Record<string, string> = {
+    Bistrot: "bistro",
+    Brasserie: "brasserie",
+    Café: "cafe",
+    Cantine: "canteen",
+    Table: "restaurant",
+    Cuisine: "restaurant",
+    Comptoir: "restaurant",
+    Atelier: "restaurant",
+    Maison: "restaurant",
+    Restaurant: "restaurant",
+  };
+
+  const items: Array<{
+    siret: string;
+    name: string;
+    lat: number;
+    lng: number;
+    address: string;
+    city: string;
+    sanitary_score: number;
+    types?: string[];
+  }> = [];
+
+  for (let i = 0; i < count; i++) {
+    const latJitter = ((i % 5) - 2) * 0.004 + i * 0.00025;
+    const lngJitter = ((Math.floor(i / 5) % 5) - 2) * 0.006 + i * 0.00018;
+    const siret = makeSiret(cityIndex, i);
+    const kind = kinds[i % kinds.length]!;
+    const street = streetNames[i % streetNames.length]!;
+    const num = 8 + i;
+    const score = (i % 4) + 1;
+
+    items.push({
+      siret,
+      name: `${kind} ${city} ${i + 1}`,
+      lat: Number((center.lat + latJitter).toFixed(6)),
+      lng: Number((center.lng + lngJitter).toFixed(6)),
+      address: `${num} ${street}`,
+      city,
+      sanitary_score: score,
+      types: [kindToType[kind] ?? "restaurant"],
+    });
+  }
+
+  return items;
+}
+
+const generated = majorCities.flatMap((c, idx) =>
+  generateRestaurantsForCity(idx, c.city, { lat: c.lat, lng: c.lng }, 10)
+);
+
+const allBase = [...base, ...generated];
+
+export const mockRestaurants: MockRestaurant[] = allBase.map((r) => ({
   ...r,
   public_id: hashToPublicId(r.siret),
 }));

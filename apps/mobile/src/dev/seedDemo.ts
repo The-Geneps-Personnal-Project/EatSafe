@@ -20,7 +20,7 @@ export async function seedDemoData(): Promise<void> {
     await upsertMinimal(r);
   }
 
-  // 2) Create a few lists and fill them (pins items).
+  // 2) Create lists and fill them (pins items).
   const listA = await createList("À tester");
   const listB = await createList("Brunch");
   const listC = await createList("Veggie");
@@ -33,12 +33,50 @@ export async function seedDemoData(): Promise<void> {
     { listId: listD.id, indices: [2, 9] },
   ];
 
+  // City lists: ~10 restaurants per major city.
+  const majorCities = [
+    "Paris",
+    "Marseille",
+    "Lyon",
+    "Toulouse",
+    "Nice",
+    "Nantes",
+    "Montpellier",
+    "Strasbourg",
+    "Bordeaux",
+    "Lille",
+    "Rennes",
+  ] as const;
+
+  for (const city of majorCities) {
+    const cityList = await createList(city);
+    const cityRestaurants = mockRestaurants
+      .filter((r) => r.city === city)
+      .slice()
+      .sort((a, b) => a.siret.localeCompare(b.siret))
+      .slice(0, 10);
+    for (const r of cityRestaurants) {
+      await addRestaurantToList(cityList.id, r.siret);
+    }
+  }
+
   const pinnedSirets = new Set<string>();
   for (const plan of listPlans) {
     for (const idx of plan.indices) {
       const r = pick(idx);
       pinnedSirets.add(r.siret);
       await addRestaurantToList(plan.listId, r.siret);
+    }
+  }
+
+  // Add city list items to the pinned set.
+  for (const city of majorCities) {
+    for (const r of mockRestaurants
+      .filter((x) => x.city === city)
+      .slice()
+      .sort((a, b) => a.siret.localeCompare(b.siret))
+      .slice(0, 10)) {
+      pinnedSirets.add(r.siret);
     }
   }
 
@@ -67,7 +105,21 @@ export async function seedDemoData(): Promise<void> {
   }
 
   // 6) Search history: helps test search suggestions UI.
-  for (const q of ["Paris", "Brunch", "Sushi", "Lyon", "Marseille", "Café"]) {
+  for (const q of [
+    "Paris",
+    "Marseille",
+    "Lyon",
+    "Toulouse",
+    "Nice",
+    "Nantes",
+    "Montpellier",
+    "Strasbourg",
+    "Bordeaux",
+    "Lille",
+    "Brunch",
+    "Sushi",
+    "Café",
+  ]) {
     await addSearchQuery(q);
   }
 

@@ -1,5 +1,5 @@
 export type RootStackParamList = {
-  Map: undefined;
+  Map: { focusSiret?: string; focusSirets?: string[] } | undefined;
   Bookmarks: undefined;
   Visited: undefined;
   Settings: undefined;

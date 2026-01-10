@@ -7,6 +7,7 @@ export type Restaurant = {
   address: string;
   city: string;
   public_id?: string;
+  types?: string[];
 };
 
 export type RestaurantDetails = Restaurant & {

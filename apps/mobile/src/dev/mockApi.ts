@@ -1,6 +1,6 @@
 import type { Restaurant, RestaurantDetails } from "../types/restaurant";
-import { getDevMockApiEnabled } from "../features/dev/devPrefs";
 import {
+  mockCities,
   mockDetailsBySiret,
   mockPublicIdToSiret,
   mockRestaurants,
@@ -11,7 +11,17 @@ function normalize(s: string) {
 }
 
 export async function shouldUseMockApi(): Promise<boolean> {
-  return __DEV__ ? await getDevMockApiEnabled() : false;
+  // In dev we force mock everywhere to avoid API hangs/timeouts.
+  return __DEV__ ? true : false;
+}
+
+export async function mockSearchCities(query: string) {
+  const q = normalize(query);
+  return mockCities
+    .filter(
+      (c) => normalize(c.city).includes(q) || normalize(c.label).includes(q)
+    )
+    .slice(0, 5);
 }
 
 export async function mockSearchRestaurants(

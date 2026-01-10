@@ -9,7 +9,6 @@ import { saveConsent, type ConsentState } from "../features/consent/consentStora
 import { loadPushState, enablePush, disablePush } from "../features/notifications/pushManager";
 import { clearSearchQueries } from "../storage/searchHistory";
 import { clearNonPinnedCache } from "../storage/restaurantCache";
-import { getDevMockApiEnabled, setDevMockApiEnabled } from "../features/dev/devPrefs";
 import { seedDemoData } from "../dev/seedDemo";
 import { resetLocalData } from "../storage/debugReset";
 import { captureError, trackEvent } from "../telemetry/telemetry";
@@ -24,7 +23,6 @@ export default function SettingsScreen({ navigation }: Props) {
   const [savingConsent, setSavingConsent] = useState(false);
   const [pushEnabled, setPushEnabledState] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
-  const [mockApiEnabled, setMockApiEnabled] = useState(false);
 
   useEffect(() => {
     trackEvent({ name: "screen_view", props: { screen: "Settings" } });
@@ -40,16 +38,7 @@ export default function SettingsScreen({ navigation }: Props) {
     })();
   }, []);
 
-  useEffect(() => {
-    if (!__DEV__) return;
-    void (async () => {
-      try {
-        setMockApiEnabled(await getDevMockApiEnabled());
-      } catch {
-        // ignore
-      }
-    })();
-  }, []);
+  // Mock API is forced on in dev (see dev/mockApi.ts).
 
   const updateConsent = useCallback(
     async (analytics: boolean) => {
@@ -188,24 +177,10 @@ export default function SettingsScreen({ navigation }: Props) {
 
             <View style={styles.row}>
               <View style={{ flex: 1 }}>
-                <Text style={styles.rowTitle}>Mock API (données locales)</Text>
-                <Text style={styles.rowSub}>Permet de tester sans backend.</Text>
+                <Text style={styles.rowTitle}>Mock API (forcé)</Text>
+                <Text style={styles.rowSub}>En dev on n'appelle jamais le backend.</Text>
               </View>
-              <Switch
-                value={mockApiEnabled}
-                onValueChange={(v) => {
-                  void (async () => {
-                    try {
-                      await setDevMockApiEnabled(v);
-                      setMockApiEnabled(v);
-                      trackEvent({ name: "dev_mock_api_toggle", props: { enabled: v } });
-                    } catch (e) {
-                      captureError(e, { where: "SettingsScreen.setDevMockApiEnabled.guest" });
-                      Alert.alert("Dev", "Impossible d’enregistrer la préférence.");
-                    }
-                  })();
-                }}
-              />
+              <Switch value={true} disabled />
             </View>
 
             <Button
@@ -422,24 +397,10 @@ export default function SettingsScreen({ navigation }: Props) {
 
           <View style={styles.row}>
             <View style={{ flex: 1 }}>
-              <Text style={styles.rowTitle}>Mock API (données locales)</Text>
-              <Text style={styles.rowSub}>Permet de tester sans backend.</Text>
+              <Text style={styles.rowTitle}>Mock API (forcé)</Text>
+              <Text style={styles.rowSub}>En dev on n'appelle jamais le backend.</Text>
             </View>
-            <Switch
-              value={mockApiEnabled}
-              onValueChange={(v) => {
-                void (async () => {
-                  try {
-                    await setDevMockApiEnabled(v);
-                    setMockApiEnabled(v);
-                    trackEvent({ name: "dev_mock_api_toggle", props: { enabled: v } });
-                  } catch (e) {
-                    captureError(e, { where: "SettingsScreen.setDevMockApiEnabled" });
-                    Alert.alert("Dev", "Impossible d’enregistrer la préférence.");
-                  }
-                })();
-              }}
-            />
+            <Switch value={true} disabled />
           </View>
 
           <Button

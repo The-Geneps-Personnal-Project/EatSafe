@@ -9,6 +9,7 @@ import {
   Text,
   View,
 } from "react-native";
+import { MaterialIcons } from "@expo/vector-icons";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import type { RootStackParamList } from "../navigation/types";
@@ -119,6 +120,29 @@ export default function ListScreen({ navigation, route }: Props) {
           </Text>
         </View>
       ) : null}
+
+      <View style={styles.listActionsBar}>
+        <Pressable
+          style={[styles.showAllBtn, items.length === 0 && styles.showAllBtnDisabled]}
+          disabled={items.length === 0}
+          accessibilityRole="button"
+          accessibilityLabel="Afficher toute la liste sur la carte"
+          onPress={() => {
+            const uniqueSirets = Array.from(new Set(items.map((it) => it.siret))).filter(Boolean);
+            trackEvent({
+              name: "nav_open",
+              props: { to: "Map", from: "List", action: "focus_sirets", count: uniqueSirets.length },
+            });
+            navigation.navigate("Map", { focusSirets: uniqueSirets });
+          }}
+        >
+          <MaterialIcons name="place" size={20} color={items.length ? "#2563eb" : "#9ca3af"} />
+          <Text style={[styles.showAllBtnText, items.length === 0 && styles.showAllBtnTextDisabled]}>
+            Tout voir sur la carte
+          </Text>
+        </Pressable>
+      </View>
+
       <FlatList
         data={items}
         keyExtractor={(it) => it.siret}
@@ -132,6 +156,7 @@ export default function ListScreen({ navigation, route }: Props) {
         renderItem={({ item }) => (
           <View style={styles.row}>
             <Pressable
+              style={{ flex: 1 }}
               onPress={() => navigation.navigate("Restaurant", { siret: item.siret })}
             >
               <View style={styles.rowBody}>
@@ -146,16 +171,34 @@ export default function ListScreen({ navigation, route }: Props) {
                 <Text style={styles.sub}>Score: {item.sanitary_score ?? "—"}</Text>
               </View>
             </Pressable>
-            <View style={{ height: 8 }} />
-            <Button
-              title="Retirer"
-              onPress={() => {
-                void (async () => {
-                  await removeRestaurantFromList(listId, item.siret);
-                  await refresh();
-                })();
-              }}
-            />
+
+            <View style={styles.rowActions}>
+              <Pressable
+                style={[styles.iconBtn, styles.iconBtnPrimary]}
+                accessibilityRole="button"
+                accessibilityLabel="Voir sur la carte"
+                onPress={() => {
+                  trackEvent({ name: "nav_open", props: { to: "Map", from: "List", action: "focus_siret" } });
+                  navigation.navigate("Map", { focusSiret: item.siret });
+                }}
+              >
+                <MaterialIcons name="place" size={20} color="#2563eb" />
+              </Pressable>
+
+              <Pressable
+                style={[styles.iconBtn, styles.iconBtnDanger]}
+                accessibilityRole="button"
+                accessibilityLabel="Retirer de la liste"
+                onPress={() => {
+                  void (async () => {
+                    await removeRestaurantFromList(listId, item.siret);
+                    await refresh();
+                  })();
+                }}
+              >
+                <Text style={[styles.iconText, styles.iconTextDanger]}>✕</Text>
+              </Pressable>
+            </View>
           </View>
         )}
       />
@@ -173,6 +216,32 @@ const styles = StyleSheet.create({
     borderBottomColor: "#f0c36d",
   },
   bannerText: { color: "#444", fontWeight: "700" },
+  listActionsBar: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: "#eee",
+    backgroundColor: "#fff",
+  },
+  showAllBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: "#dbeafe",
+  },
+  showAllBtnDisabled: {
+    backgroundColor: "#f3f4f6",
+  },
+  showAllBtnText: {
+    fontWeight: "800",
+    color: "#1d4ed8",
+  },
+  showAllBtnTextDisabled: {
+    color: "#6b7280",
+  },
   center: {
     flex: 1,
     alignItems: "center",
@@ -183,10 +252,35 @@ const styles = StyleSheet.create({
   title: { fontSize: 18, fontWeight: "800" },
   body: { color: "#444", textAlign: "center" },
   row: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
     paddingHorizontal: 14,
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#eee",
+  },
+  rowActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  iconBtn: {
+    width: 34,
+    height: 34,
+    borderRadius: 10,
+    backgroundColor: "#f3f4f6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconBtnPrimary: {
+    backgroundColor: "#dbeafe",
+  },
+  iconBtnDanger: {
+    backgroundColor: "#fee2e2",
+  },
+  iconTextDanger: {
+    color: "#b00020",
   },
   rowBody: { gap: 2 },
   name: { fontWeight: "800" },
