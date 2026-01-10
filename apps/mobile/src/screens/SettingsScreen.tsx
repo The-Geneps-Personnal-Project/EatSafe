@@ -333,7 +333,10 @@ export default function SettingsScreen({ navigation }: Props) {
                 try {
                   trackEvent({ name: "dev_seed_demo" });
                   await seedDemoData();
-                  Alert.alert("Dev", "Données de démo créées. Va sur la carte puis Favoris/Récents.");
+                  Alert.alert(
+                    "Dev",
+                    "Données de démo créées (reset + remplissage). Va sur la carte puis Favoris / Listes / Historique / Récents."
+                  );
                 } catch (e) {
                   captureError(e, { where: "SettingsScreen.seedDemoData" });
                   Alert.alert("Dev", "Impossible de créer les données de démo.");
