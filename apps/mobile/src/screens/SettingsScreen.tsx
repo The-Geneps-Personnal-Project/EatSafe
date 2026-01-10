@@ -6,6 +6,9 @@ import type { RootStackParamList } from "../navigation/types";
 import { useAuth } from "../auth/authState";
 import { useConsent } from "../features/consent/ConsentContext";
 import { saveConsent, type ConsentState } from "../features/consent/consentStorage";
+import { getDevMockApiEnabled, setDevMockApiEnabled } from "../features/dev/devPrefs";
+import { seedDemoData } from "../dev/seedDemo";
+import { resetLocalData } from "../storage/debugReset";
 import { captureError, trackEvent } from "../telemetry/telemetry";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Settings">;
@@ -15,9 +18,21 @@ export default function SettingsScreen({ navigation }: Props) {
   const { consent, setConsent } = useConsent();
 
   const [savingConsent, setSavingConsent] = useState(false);
+  const [mockApiEnabled, setMockApiEnabled] = useState(false);
 
   useEffect(() => {
     trackEvent({ name: "screen_view", props: { screen: "Settings" } });
+  }, []);
+
+  useEffect(() => {
+    if (!__DEV__) return;
+    void (async () => {
+      try {
+        setMockApiEnabled(await getDevMockApiEnabled());
+      } catch {
+        // ignore
+      }
+    })();
   }, []);
 
   const updateConsent = useCallback(
@@ -143,6 +158,81 @@ export default function SettingsScreen({ navigation }: Props) {
           />
         </View>
       </View>
+
+      {__DEV__ ? (
+        <View style={styles.card}>
+          <Text style={styles.sectionTitle}>Dev</Text>
+
+          <View style={styles.row}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.rowTitle}>Mock API (données locales)</Text>
+              <Text style={styles.rowSub}>Permet de tester sans backend.</Text>
+            </View>
+            <Switch
+              value={mockApiEnabled}
+              onValueChange={(v) => {
+                void (async () => {
+                  try {
+                    await setDevMockApiEnabled(v);
+                    setMockApiEnabled(v);
+                    trackEvent({ name: "dev_mock_api_toggle", props: { enabled: v } });
+                  } catch (e) {
+                    captureError(e, { where: "SettingsScreen.setDevMockApiEnabled" });
+                    Alert.alert("Dev", "Impossible d’enregistrer la préférence.");
+                  }
+                })();
+              }}
+            />
+          </View>
+
+          <Button
+            title="Créer des données de démo"
+            onPress={() => {
+              void (async () => {
+                try {
+                  trackEvent({ name: "dev_seed_demo" });
+                  await seedDemoData();
+                  Alert.alert("Dev", "Données de démo créées. Va sur la carte puis Favoris/Récents.");
+                } catch (e) {
+                  captureError(e, { where: "SettingsScreen.seedDemoData" });
+                  Alert.alert("Dev", "Impossible de créer les données de démo.");
+                }
+              })();
+            }}
+          />
+
+          <View style={{ height: 8 }} />
+
+          <Button
+            title="Reset données locales (SQLite)"
+            onPress={() => {
+              Alert.alert(
+                "Reset",
+                "Supprimer toutes les données locales (favoris, listes, cache, historique) ?",
+                [
+                  { text: "Annuler", style: "cancel" },
+                  {
+                    text: "Reset",
+                    style: "destructive",
+                    onPress: () => {
+                      void (async () => {
+                        try {
+                          trackEvent({ name: "dev_reset_local_data" });
+                          await resetLocalData();
+                          Alert.alert("Reset", "OK.");
+                        } catch (e) {
+                          captureError(e, { where: "SettingsScreen.resetLocalData" });
+                          Alert.alert("Reset", "Échec.");
+                        }
+                      })();
+                    },
+                  },
+                ]
+              );
+            }}
+          />
+        </View>
+      ) : null}
     </View>
   );
 }

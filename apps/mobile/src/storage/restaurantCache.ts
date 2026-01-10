@@ -228,3 +228,31 @@ export async function listCachedForOfflineMap(
     lng: (r.lng ?? 0) as number,
   }));
 }
+
+export async function listCachedRecentlyViewedForMap(
+  limit = 250
+): Promise<Restaurant[]> {
+  await migrateDb();
+  const db = await getDb();
+
+  const rows = await db.getAllAsync<CachedMinimalRestaurant>(
+    `SELECT siret, public_id, name, address, city, sanitary_score, lat, lng, bookmarked, pinned, last_viewed_at
+       FROM restaurant_cache
+      WHERE lat IS NOT NULL
+        AND lng IS NOT NULL
+      ORDER BY last_viewed_at DESC
+      LIMIT ?`,
+    [limit]
+  );
+
+  return (rows ?? []).map((r) => ({
+    siret: r.siret,
+    public_id: r.public_id ?? undefined,
+    name: r.name,
+    address: r.address,
+    city: r.city,
+    sanitary_score: (r.sanitary_score ?? NaN) as unknown as number,
+    lat: (r.lat ?? 0) as number,
+    lng: (r.lng ?? 0) as number,
+  }));
+}

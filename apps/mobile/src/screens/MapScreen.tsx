@@ -10,7 +10,7 @@ import type { Restaurant } from "../types/restaurant";
 import { fetchRestaurantsByCity, searchRestaurants } from "../services/restaurantService";
 import { searchCities } from "../services/geoService";
 import { upsertMinimal } from "../storage/restaurantCache";
-import { listCachedForOfflineMap } from "../storage/restaurantCache";
+import { listCachedForOfflineMap, listCachedRecentlyViewedForMap } from "../storage/restaurantCache";
 import { addSearchQuery, clearSearchQueries, listSearchQueries } from "../storage/searchHistory";
 import { useNetwork } from "../hooks/useNetwork";
 import { captureError, trackEvent } from "../telemetry/telemetry";
@@ -20,6 +20,10 @@ type Props = NativeStackScreenProps<RootStackParamList, "Map">;
 type SearchItem =
     | { kind: "restaurant"; restaurant: Restaurant }
     | { kind: "city"; city: string; lat: number; lng: number };
+
+function normalizeText(s: string) {
+    return s.trim().toLowerCase();
+}
 
 type MapMarker =
     | { kind: "restaurant"; restaurant: Restaurant }
@@ -267,6 +271,29 @@ export default function MapScreen({ navigation }: Props) {
             return;
         }
 
+        if (!isOnline) {
+            // Offline search: search only inside local cached restaurants.
+            setLoading(true);
+            try {
+                const cached = await listCachedRecentlyViewedForMap(400);
+                const needle = normalizeText(q);
+                const matches = cached
+                    .filter((r) => {
+                        const hay = `${r.name} ${r.address} ${r.city}`.toLowerCase();
+                        return hay.includes(needle);
+                    })
+                    .slice(0, 25)
+                    .map((r) => ({ kind: "restaurant" as const, restaurant: r }));
+                setResults(matches);
+                setCitySearchUnavailable(true);
+            } catch (e) {
+                captureError(e, { where: "MapScreen.runSearch.offline" });
+            } finally {
+                setLoading(false);
+            }
+            return;
+        }
+
         setLoading(true);
         try {
             setCitySearchUnavailable(false);
@@ -453,6 +480,27 @@ export default function MapScreen({ navigation }: Props) {
         }
     };
 
+    const loadOfflineRecent = async () => {
+        trackEvent({ name: "offline_load_recent" });
+        try {
+            const cached = await listCachedRecentlyViewedForMap(250);
+            if (!cached.length) {
+                Alert.alert("Récents", "Aucun restaurant en cache pour le moment.");
+                return;
+            }
+            setRestaurants(cached);
+            setSelectedSiret(null);
+            const next = computeRegionForRestaurants(cached);
+            if (next) {
+                setRegion(next);
+                mapRef.current?.animateToRegion(next, 350);
+            }
+        } catch (e) {
+            captureError(e, { where: "MapScreen.loadOfflineRecent" });
+            Alert.alert("Récents", "Impossible de charger le cache.");
+        }
+    };
+
     useEffect(() => {
         if (!isOnline && restaurants.length === 0) {
             void loadOfflinePinned("auto");
@@ -559,6 +607,13 @@ export default function MapScreen({ navigation }: Props) {
                         onPress={() => void loadOfflinePinned("user")}
                     >
                         <Text style={styles.toolBtnText}>Favoris</Text>
+                    </Pressable>
+
+                    <Pressable
+                        style={styles.toolBtn}
+                        onPress={() => void loadOfflineRecent()}
+                    >
+                        <Text style={styles.toolBtnText}>Récents</Text>
                     </Pressable>
                 </View>
 

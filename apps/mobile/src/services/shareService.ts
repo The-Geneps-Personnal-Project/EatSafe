@@ -1,4 +1,5 @@
 import { http } from "./http";
+import { mockEnsurePublicIdForSiret, shouldUseMockApi } from "../dev/mockApi";
 
 export type PublicIdResponse = {
   publicId?: string;
@@ -6,6 +7,7 @@ export type PublicIdResponse = {
 };
 
 export async function ensurePublicIdForSiret(siret: string): Promise<string> {
+  if (await shouldUseMockApi()) return await mockEnsurePublicIdForSiret(siret);
   // Backend to implement: POST /restaurants/public { siret }
   const res = await http.post<PublicIdResponse>("/restaurants/public", {
     siret,
