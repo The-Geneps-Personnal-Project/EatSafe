@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Button, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Button, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import type { RootStackParamList } from "../navigation/types";
@@ -19,6 +19,27 @@ type Props = NativeStackScreenProps<RootStackParamList, "Restaurant">;
 
 function isRestrictedGuestField(key: string) {
     return key === "reviews" || key === "photos" || key === "opening_hours";
+}
+
+function formatDateFr(value?: string) {
+    if (!value) return null;
+    // Accepts ISO-ish strings (YYYY-MM-DD or YYYY-MM-DDTHH:mm:ssZ)
+    const match = /^\s*(\d{4})-(\d{2})-(\d{2})/.exec(value);
+    if (!match) return value;
+    const [, y, m, d] = match;
+    return `${d}/${m}/${y}`;
+}
+
+function Stars({ rating }: { rating: number }) {
+    const clamped = Math.max(0, Math.min(5, Math.round(rating)));
+    const full = "★".repeat(clamped);
+    const empty = "☆".repeat(5 - clamped);
+    return (
+        <Text style={styles.stars}>
+            {full}
+            <Text style={styles.starsEmpty}>{empty}</Text>
+        </Text>
+    );
 }
 
 export default function RestaurantScreen({ navigation, route }: Props) {
@@ -210,6 +231,8 @@ export default function RestaurantScreen({ navigation, route }: Props) {
 
     const base = restaurant ?? minimalOffline;
     const sanitary = base?.sanitary_score ?? "—";
+    const sanitaryLabel = restaurant?.sanitary_score_label;
+    const inspectionDate = formatDateFr(restaurant?.inspection_date);
 
     const activeSiret = restaurant?.siret ?? minimalOffline?.siret ?? siret;
 
@@ -263,27 +286,102 @@ export default function RestaurantScreen({ navigation, route }: Props) {
 
             <Text style={styles.name}>{base!.name}</Text>
             <Text style={styles.addr}>{base!.address}, {base!.city}</Text>
-            <Text style={styles.score}>Score sanitaire: {sanitary}</Text>
+            <View style={styles.metaRow}>
+                <View style={styles.metaPill}>
+                    <Text style={styles.metaPillText}>Score: {sanitary}</Text>
+                </View>
+                {sanitaryLabel ? (
+                    <View style={styles.metaPill}>
+                        <Text style={styles.metaPillText}>{sanitaryLabel}</Text>
+                    </View>
+                ) : null}
+                {inspectionDate ? (
+                    <View style={styles.metaPill}>
+                        <Text style={styles.metaPillText}>Inspecté: {inspectionDate}</Text>
+                    </View>
+                ) : null}
+                {restaurant?.opening_hours && !isGuest ? (
+                    <View style={[styles.metaPill, restaurant.opening_hours.open_now ? styles.metaPillOpen : styles.metaPillClosed]}>
+                        <Text style={styles.metaPillText}>{restaurant.opening_hours.open_now ? "Ouvert" : "Fermé"}</Text>
+                    </View>
+                ) : null}
+            </View>
 
             {isGuest ? <RestrictedInfo /> : null}
 
-            <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Détails</Text>
-                {restaurant ? (
-                    Object.entries(restaurant).map(([k, v]) => {
+            {restaurant?.opening_hours && !isGuest ? (
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Horaires</Text>
+                    {restaurant.opening_hours.weekdayDescriptions?.length ? (
+                        restaurant.opening_hours.weekdayDescriptions.map((line, idx) => (
+                            <Text key={`${idx}-${line}`} style={styles.kv}>{line}</Text>
+                        ))
+                    ) : (
+                        <Text style={styles.kv}>Horaires indisponibles.</Text>
+                    )}
+                </View>
+            ) : null}
+
+            {restaurant?.photos && !isGuest ? (
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Photos</Text>
+                    {restaurant.photos.some((p) => "url" in p && Boolean((p as any).url)) ? (
+                        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.photosRow}>
+                            {restaurant.photos
+                                .filter((p): p is { url: string } => ("url" in p) && Boolean((p as any).url))
+                                .slice(0, 12)
+                                .map((p, idx) => (
+                                    <Image
+                                        key={`${idx}-${p.url}`}
+                                        source={{ uri: p.url }}
+                                        style={styles.photo}
+                                    />
+                                ))}
+                        </ScrollView>
+                    ) : (
+                        <Text style={styles.kv}>Photos indisponibles.</Text>
+                    )}
+                </View>
+            ) : null}
+
+            {restaurant?.reviews && !isGuest ? (
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Avis</Text>
+                    {restaurant.reviews.length ? (
+                        restaurant.reviews.slice(0, 10).map((r, idx) => (
+                            <View key={`${idx}-${r.author_name}`} style={styles.reviewCard}>
+                                <View style={styles.reviewHeader}>
+                                    <Text style={styles.reviewAuthor}>{r.author_name}</Text>
+                                    <Stars rating={r.rating} />
+                                </View>
+                                {r.relative_time_description ? (
+                                    <Text style={styles.reviewTime}>{r.relative_time_description}</Text>
+                                ) : null}
+                                {r.text ? <Text style={styles.reviewText}>{r.text}</Text> : null}
+                            </View>
+                        ))
+                    ) : (
+                        <Text style={styles.kv}>Aucun avis.</Text>
+                    )}
+                </View>
+            ) : null}
+
+            {restaurant && __DEV__ ? (
+                <View style={styles.section}>
+                    <Text style={styles.sectionTitle}>Debug (dev)</Text>
+                    {Object.entries(restaurant).map(([k, v]) => {
                         if (k === "name" || k === "address" || k === "city" || k === "sanitary_score" || k === "lat" || k === "lng") return null;
                         if (isGuest && isRestrictedGuestField(k)) return null;
                         if (v === null || v === undefined) return null;
+                        if (typeof v === "object") return null;
                         return (
                             <Text key={k} style={styles.kv}>
-                                {k}: {typeof v === "string" || typeof v === "number" ? String(v) : "[objet]"}
+                                {k}: {String(v)}
                             </Text>
                         );
-                    })
-                ) : (
-                    <Text style={styles.kv}>Informations détaillées indisponibles hors-ligne.</Text>
-                )}
-            </View>
+                    })}
+                </View>
+            ) : null}
 
             <View style={styles.section}>
                 <Button
@@ -357,7 +455,18 @@ const styles = StyleSheet.create({
     errorBody: { marginTop: 6, color: "#444", textAlign: "center" },
     name: { fontSize: 22, fontWeight: "800" },
     addr: { color: "#444" },
-    score: { fontWeight: "700" },
+    metaRow: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginTop: 4 },
+    metaPill: {
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 999,
+        backgroundColor: "#f2f2f2",
+        borderWidth: 1,
+        borderColor: "#e3e3e3",
+    },
+    metaPillOpen: { backgroundColor: "#e7f8ee", borderColor: "#bfe8cf" },
+    metaPillClosed: { backgroundColor: "#fdecec", borderColor: "#f5c2c7" },
+    metaPillText: { fontWeight: "800", color: "#222" },
     offlineBanner: {
         alignSelf: "flex-start",
         paddingHorizontal: 10,
@@ -395,5 +504,21 @@ const styles = StyleSheet.create({
     restrictedBody: { color: "#444" },
     section: { marginTop: 10, gap: 6 },
     sectionTitle: { fontSize: 16, fontWeight: "800" },
-    kv: { color: "#333" }
+    kv: { color: "#333" },
+    photosRow: { gap: 10, paddingVertical: 4 },
+    photo: { width: 220, height: 140, borderRadius: 12, backgroundColor: "#eee" },
+    reviewCard: {
+        padding: 12,
+        borderRadius: 12,
+        backgroundColor: "#fff",
+        borderWidth: 1,
+        borderColor: "#eee",
+        gap: 6,
+    },
+    reviewHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 10 },
+    reviewAuthor: { fontWeight: "800", flexShrink: 1 },
+    reviewTime: { color: "#666" },
+    reviewText: { color: "#222" },
+    stars: { fontWeight: "800" },
+    starsEmpty: { color: "#bbb" },
 });
