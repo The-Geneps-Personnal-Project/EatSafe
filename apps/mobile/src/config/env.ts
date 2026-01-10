@@ -8,6 +8,10 @@ const EnvSchema = z.object({
   EXPO_PUBLIC_FIREBASE_PROJECT_ID: z.string().optional(),
   EXPO_PUBLIC_FIREBASE_APP_ID: z.string().optional(),
   EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: z.string().optional(),
+
+  EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID: z.string().optional(),
+  EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID: z.string().optional(),
+  EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID: z.string().optional(),
 });
 
 const parsed = EnvSchema.safeParse(process.env);
@@ -24,6 +28,13 @@ export const env = {
         projectId: parsed.data.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
         appId: parsed.data.EXPO_PUBLIC_FIREBASE_APP_ID,
         messagingSenderId: parsed.data.EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID,
+      }
+    : {},
+  google: parsed.success
+    ? {
+        iosClientId: parsed.data.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
+        androidClientId: parsed.data.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
+        webClientId: parsed.data.EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID,
       }
     : {},
 };

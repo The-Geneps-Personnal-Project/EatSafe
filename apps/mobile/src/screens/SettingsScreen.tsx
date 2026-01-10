@@ -17,12 +17,21 @@ import { toErrorMessage } from "../utils/errors";
 type Props = NativeStackScreenProps<RootStackParamList, "Settings">;
 
 export default function SettingsScreen({ navigation }: Props) {
-  const { user, isGuest, logout, firebaseEnabled, firebaseDisabledReason } = useAuth();
+  const {
+    user,
+    isGuest,
+    logout,
+    resendEmailVerification,
+    reloadUser,
+    firebaseEnabled,
+    firebaseDisabledReason,
+  } = useAuth();
   const { consent, setConsent } = useConsent();
 
   const [savingConsent, setSavingConsent] = useState(false);
   const [pushEnabled, setPushEnabledState] = useState(false);
   const [pushBusy, setPushBusy] = useState(false);
+  const [verifyBusy, setVerifyBusy] = useState(false);
 
   useEffect(() => {
     trackEvent({ name: "screen_view", props: { screen: "Settings" } });
@@ -243,6 +252,73 @@ export default function SettingsScreen({ navigation }: Props) {
       <View style={styles.card}>
         <Text style={styles.sectionTitle}>Compte</Text>
         <Text style={styles.body}>Connecté{user?.email ? `: ${user.email}` : ""}</Text>
+
+        {user?.email ? (
+          <View style={{ marginTop: 8 }}>
+            <Text style={styles.hint}>
+              {user.emailVerified ? "Email vérifié" : "Email non vérifié"}
+            </Text>
+
+            {!user.emailVerified ? (
+              <View style={{ gap: 8, marginTop: 8 }}>
+                <Button
+                  title="Renvoyer l’email de vérification"
+                  disabled={verifyBusy || !firebaseEnabled}
+                  onPress={() => {
+                    void (async () => {
+                      setVerifyBusy(true);
+                      try {
+                        await resendEmailVerification();
+                        trackEvent({ name: "auth_email_verification_sent" });
+                        Alert.alert(
+                          "Vérification",
+                          "Email de vérification renvoyé."
+                        );
+                      } catch (e) {
+                        captureError(e, {
+                          where: "SettingsScreen.resendEmailVerification",
+                        });
+                        Alert.alert("Erreur", toErrorMessage(e));
+                      } finally {
+                        setVerifyBusy(false);
+                      }
+                    })();
+                  }}
+                />
+
+                <Button
+                  title="J’ai vérifié"
+                  disabled={verifyBusy || !firebaseEnabled}
+                  onPress={() => {
+                    void (async () => {
+                      setVerifyBusy(true);
+                      try {
+                        const res = await reloadUser();
+                        if (res?.emailVerified) {
+                          Alert.alert(
+                            "Vérification",
+                            "Merci ! Ton email est vérifié."
+                          );
+                        } else {
+                          Alert.alert(
+                            "Vérification",
+                            "Pas encore vérifié. Réessaie dans quelques secondes."
+                          );
+                        }
+                      } catch (e) {
+                        captureError(e, { where: "SettingsScreen.reloadUser" });
+                        Alert.alert("Erreur", toErrorMessage(e));
+                      } finally {
+                        setVerifyBusy(false);
+                      }
+                    })();
+                  }}
+                />
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+
         <View style={{ height: 10 }} />
         <Button title="Se déconnecter" onPress={() => void onLogout()} />
       </View>

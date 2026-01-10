@@ -279,6 +279,10 @@ const styles = StyleSheet.create({
   iconBtnDanger: {
     backgroundColor: "#fee2e2",
   },
+  iconText: {
+    fontWeight: "900",
+    fontSize: 16,
+  },
   iconTextDanger: {
     color: "#b00020",
   },
