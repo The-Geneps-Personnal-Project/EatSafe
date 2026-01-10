@@ -17,10 +17,12 @@
       "supportsTablet": true,
       "bundleIdentifier": "fr.adabin.eatsafe",
       "associatedDomains": [
+        "applinks:eatsafe.adabin.fr",
         "applinks:eatsafe.adabin.fr"
       ],
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Votre position est utilisée pour afficher les restaurants autour de vous."
+        "NSLocationWhenInUseUsageDescription": "Votre position est utilisée pour afficher les restaurants autour de vous.",
+        "ITSAppUsesNonExemptEncryption": false
       }
     },
     "android": {
@@ -67,5 +69,6 @@
       }
     },
     "owner": "zendiuk"
+          "ITSAppUsesNonExemptEncryption": false,
   }
 }
