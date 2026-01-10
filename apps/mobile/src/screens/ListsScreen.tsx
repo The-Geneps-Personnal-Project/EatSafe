@@ -18,9 +18,9 @@ import {
   addRestaurantToList,
   createList,
   listIdsForRestaurant,
-  listLists,
+  listListsWithCounts,
   removeRestaurantFromList,
-  type ListRow,
+  type ListWithCountRow,
 } from "../storage/lists";
 import { trackEvent } from "../telemetry/telemetry";
 
@@ -31,7 +31,7 @@ export default function ListsScreen({ navigation, route }: Props) {
   const { isGuest } = useAuth();
 
   const [loading, setLoading] = useState(true);
-  const [items, setItems] = useState<ListRow[]>([]);
+  const [items, setItems] = useState<ListWithCountRow[]>([]);
   const [newName, setNewName] = useState("");
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
 
@@ -44,7 +44,7 @@ export default function ListsScreen({ navigation, route }: Props) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const rows = await listLists();
+      const rows = await listListsWithCounts();
       setItems(rows);
 
       if (pickForSiret) {
@@ -145,6 +145,21 @@ export default function ListsScreen({ navigation, route }: Props) {
           keyExtractor={(it) => String(it.id)}
           onRefresh={() => void refresh()}
           refreshing={loading}
+          ListHeaderComponent={
+            pickForSiret ? null : (
+              <Pressable
+                style={styles.row}
+                onPress={() => navigation.navigate("Selected")}
+              >
+                <View style={styles.rowBody}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    Tous les restaurants sélectionnés
+                  </Text>
+                  <Text style={styles.sub}>Voir tous ceux ajoutés à une liste</Text>
+                </View>
+              </Pressable>
+            )
+          }
           ListEmptyComponent={listEmpty}
           renderItem={({ item }) => {
             const selected = pickForSiret ? selectedIds.has(item.id) : false;
@@ -160,7 +175,9 @@ export default function ListsScreen({ navigation, route }: Props) {
                       {item.name}
                     </Text>
                     <Text style={styles.sub}>
-                      {selected ? "Ajouté ✅" : "Appuie pour ajouter"}
+                      {selected
+                        ? "Ajouté ✅"
+                        : `Appuie pour ajouter • ${item.item_count} dans la liste`}
                     </Text>
                   </View>
                 </Pressable>
@@ -176,7 +193,7 @@ export default function ListsScreen({ navigation, route }: Props) {
                   <Text style={styles.name} numberOfLines={1}>
                     {item.name}
                   </Text>
-                  <Text style={styles.sub}>Ouvrir</Text>
+                  <Text style={styles.sub}>{item.item_count} restaurant(s)</Text>
                 </View>
               </Pressable>
             );

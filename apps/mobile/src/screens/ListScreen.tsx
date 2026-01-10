@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Button,
   FlatList,
   Pressable,
@@ -13,6 +14,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { useAuth } from "../auth/authState";
 import {
+  deleteList,
   listRestaurantsInList,
   removeRestaurantFromList,
   type ListItemRow,
@@ -29,8 +31,43 @@ export default function ListScreen({ navigation, route }: Props) {
   const [items, setItems] = useState<ListItemRow[]>([]);
 
   useLayoutEffect(() => {
-    navigation.setOptions({ title: name });
-  }, [navigation, name]);
+    if (isGuest) {
+      navigation.setOptions({ title: name, headerRight: undefined });
+      return;
+    }
+
+    navigation.setOptions({
+      title: name,
+      headerRight: () => (
+        <Pressable
+          onPress={() => {
+            Alert.alert(
+              "Supprimer la liste",
+              "Supprimer cette liste ? Cette action est irréversible.",
+              [
+                { text: "Annuler", style: "cancel" },
+                {
+                  text: "Supprimer",
+                  style: "destructive",
+                  onPress: () => {
+                    void (async () => {
+                      trackEvent({ name: "list_delete_tap" });
+                      await deleteList(listId);
+                      trackEvent({ name: "list_delete_success" });
+                      navigation.goBack();
+                    })();
+                  },
+                },
+              ]
+            );
+          }}
+          style={{ paddingHorizontal: 10, paddingVertical: 6 }}
+        >
+          <Text style={{ fontWeight: "800", color: "#b00020" }}>Supprimer</Text>
+        </Pressable>
+      ),
+    });
+  }, [isGuest, listId, name, navigation]);
 
   const refresh = useCallback(async () => {
     setLoading(true);

@@ -6,6 +6,10 @@ export type ListRow = {
   created_at: number;
 };
 
+export type ListWithCountRow = ListRow & {
+  item_count: number;
+};
+
 export async function createList(name: string): Promise<ListRow> {
   await migrateDb();
   const db = await getDb();
@@ -34,6 +38,23 @@ export async function listLists(): Promise<ListRow[]> {
     `SELECT id, name, created_at FROM lists ORDER BY created_at DESC`
   );
   return rows ?? [];
+}
+
+export async function listListsWithCounts(): Promise<ListWithCountRow[]> {
+  await migrateDb();
+  const db = await getDb();
+  const rows = await db.getAllAsync<ListWithCountRow>(
+    `SELECT l.id as id,
+            l.name as name,
+            l.created_at as created_at,
+            (SELECT COUNT(*) FROM list_items li WHERE li.list_id = l.id) as item_count
+     FROM lists l
+     ORDER BY l.created_at DESC`
+  );
+  return (rows ?? []).map((r) => ({
+    ...r,
+    item_count: Number(r.item_count ?? 0),
+  }));
 }
 
 export async function deleteList(listId: number): Promise<void> {
@@ -137,6 +158,24 @@ export async function listRestaurantsInList(
      WHERE li.list_id = ?
      ORDER BY li.created_at DESC`,
     [listId]
+  );
+  return (rows ?? []).filter((r) => r.siret);
+}
+
+export async function listRestaurantsInAnyList(): Promise<ListItemRow[]> {
+  await migrateDb();
+  const db = await getDb();
+  const rows = await db.getAllAsync<ListItemRow>(
+    `SELECT li.siret as siret,
+            COALESCE(rc.name, '') as name,
+            COALESCE(rc.address, '') as address,
+            COALESCE(rc.city, '') as city,
+            rc.sanitary_score as sanitary_score,
+            MAX(li.created_at) as created_at
+     FROM list_items li
+     LEFT JOIN restaurant_cache rc ON rc.siret = li.siret
+     GROUP BY li.siret
+     ORDER BY MAX(li.created_at) DESC`
   );
   return (rows ?? []).filter((r) => r.siret);
 }
