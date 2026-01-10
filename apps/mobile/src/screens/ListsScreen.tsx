@@ -22,6 +22,7 @@ import {
   removeRestaurantFromList,
   type ListWithCountRow,
 } from "../storage/lists";
+import { requestPinnedDetailsSync } from "../features/sync/pinnedSyncRequests";
 import { trackEvent } from "../telemetry/telemetry";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Lists">;
@@ -76,6 +77,7 @@ export default function ListsScreen({ navigation, route }: Props) {
 
       if (pickForSiret) {
         await addRestaurantToList(row.id, pickForSiret);
+        requestPinnedDetailsSync("list_add");
         setSelectedIds((prev) => new Set(prev).add(row.id));
       }
 
@@ -96,6 +98,7 @@ export default function ListsScreen({ navigation, route }: Props) {
       next.delete(listId);
     } else {
       await addRestaurantToList(listId, pickForSiret);
+      requestPinnedDetailsSync("list_add");
       next.add(listId);
     }
 

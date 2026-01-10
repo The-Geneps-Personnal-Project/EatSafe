@@ -11,6 +11,7 @@ import { useNetwork } from "../hooks/useNetwork";
 import { isBookmarked, setBookmarked } from "../storage/bookmarks";
 import { isVisited, setVisited } from "../storage/visited";
 import { addRestaurantToList, createList, listIdsForRestaurant, listLists, removeRestaurantFromList, type ListRow } from "../storage/lists";
+import { requestPinnedDetailsSync } from "../features/sync/pinnedSyncRequests";
 import { buildShareUrl, ensurePublicIdForSiret } from "../services/shareService";
 import { copyText, shareLink } from "../utils/share";
 import { toErrorMessage } from "../utils/errors";
@@ -288,7 +289,10 @@ export default function RestaurantScreen({ navigation, route }: Props) {
 
         try {
             if (wasIn) await removeRestaurantFromList(listId, activeSiret);
-            else await addRestaurantToList(listId, activeSiret);
+            else {
+                await addRestaurantToList(listId, activeSiret);
+                requestPinnedDetailsSync("list_add");
+            }
         } catch (e) {
             const rollback = new Set(optimistic);
             if (wasIn) rollback.add(listId);
@@ -311,6 +315,7 @@ export default function RestaurantScreen({ navigation, route }: Props) {
         try {
             const row = await createList(trimmed);
             await addRestaurantToList(row.id, activeSiret);
+            requestPinnedDetailsSync("list_add");
             setNewListName("");
             await refreshListsState(activeSiret);
         } catch (e) {
@@ -346,6 +351,9 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                 // If offline, we keep the bookmark flag and will fill details later.
                 trackEvent({ name: "bookmark_fill_failed" });
             }
+
+            // Best-effort: if details were missing (or couldn't be fetched), hydrate as soon as we're online.
+            requestPinnedDetailsSync("bookmark");
         }
     };
 
