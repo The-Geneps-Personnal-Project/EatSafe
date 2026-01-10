@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Alert, Button, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Alert, Button, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import type { RootStackParamList } from "../navigation/types";
@@ -10,6 +10,7 @@ import { useAuth } from "../auth/authState";
 import { useNetwork } from "../hooks/useNetwork";
 import { isBookmarked, setBookmarked } from "../storage/bookmarks";
 import { isVisited, setVisited } from "../storage/visited";
+import { addRestaurantToList, createList, listIdsForRestaurant, listLists, removeRestaurantFromList, type ListRow } from "../storage/lists";
 import { buildShareUrl, ensurePublicIdForSiret } from "../services/shareService";
 import { copyText, shareLink } from "../utils/share";
 import { toErrorMessage } from "../utils/errors";
@@ -60,6 +61,12 @@ export default function RestaurantScreen({ navigation, route }: Props) {
 
     const [bookmarked, setBookmarkedState] = useState(false);
     const [visited, setVisitedState] = useState(false);
+
+    const [listsModalOpen, setListsModalOpen] = useState(false);
+    const [listsLoading, setListsLoading] = useState(false);
+    const [lists, setLists] = useState<ListRow[]>([]);
+    const [listIdSet, setListIdSet] = useState<Set<number>>(new Set());
+    const [newListName, setNewListName] = useState("");
 
     const title = useMemo(() => restaurant?.name ?? "Restaurant", [restaurant?.name]);
 
@@ -236,6 +243,84 @@ export default function RestaurantScreen({ navigation, route }: Props) {
 
     const activeSiret = restaurant?.siret ?? minimalOffline?.siret ?? siret;
 
+    const refreshListsState = async (forSiret: string) => {
+        setListsLoading(true);
+        try {
+            const [allLists, ids] = await Promise.all([listLists(), listIdsForRestaurant(forSiret)]);
+            setLists(allLists);
+            setListIdSet(new Set(ids));
+        } finally {
+            setListsLoading(false);
+        }
+    };
+
+    const openListsModal = async () => {
+        if (isGuest) {
+            trackEvent({ name: "guest_blocked_action", props: { action: "lists" } });
+            navigation.navigate("Auth");
+            return;
+        }
+        if (!activeSiret) {
+            Alert.alert("Listes", "Restaurant introuvable.");
+            return;
+        }
+
+        trackEvent({ name: "lists_modal_open" });
+        setListsModalOpen(true);
+        try {
+            await refreshListsState(activeSiret);
+        } catch (e) {
+            captureError(e, { where: "RestaurantScreen.openListsModal" });
+            Alert.alert("Listes", toErrorMessage(e));
+        }
+    };
+
+    const toggleListMembership = async (listId: number) => {
+        if (!activeSiret) return;
+
+        const wasIn = listIdSet.has(listId);
+        const optimistic = new Set(listIdSet);
+        if (wasIn) optimistic.delete(listId);
+        else optimistic.add(listId);
+        setListIdSet(optimistic);
+
+        trackEvent({ name: "list_membership_toggle", props: { enabled: !wasIn } });
+
+        try {
+            if (wasIn) await removeRestaurantFromList(listId, activeSiret);
+            else await addRestaurantToList(listId, activeSiret);
+        } catch (e) {
+            const rollback = new Set(optimistic);
+            if (wasIn) rollback.add(listId);
+            else rollback.delete(listId);
+            setListIdSet(rollback);
+            captureError(e, { where: "RestaurantScreen.toggleListMembership" });
+            Alert.alert("Listes", toErrorMessage(e));
+        }
+    };
+
+    const createListAndAdd = async () => {
+        if (!activeSiret) return;
+        const trimmed = newListName.trim();
+        if (!trimmed) {
+            Alert.alert("Listes", "Nom de liste requis.");
+            return;
+        }
+
+        setListsLoading(true);
+        try {
+            const row = await createList(trimmed);
+            await addRestaurantToList(row.id, activeSiret);
+            setNewListName("");
+            await refreshListsState(activeSiret);
+        } catch (e) {
+            captureError(e, { where: "RestaurantScreen.createListAndAdd" });
+            Alert.alert("Listes", toErrorMessage(e));
+        } finally {
+            setListsLoading(false);
+        }
+    };
+
     const toggleBookmark = async () => {
         if (isGuest) {
             trackEvent({ name: "guest_blocked_action", props: { action: "bookmark" } });
@@ -405,15 +490,7 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                 <Button
                     title={isGuest ? "Ajouter à une liste (compte requis)" : "Ajouter à une liste"}
                     onPress={() => {
-                        if (isGuest) {
-                            navigation.navigate("Auth");
-                            return;
-                        }
-                        if (!activeSiret) {
-                            Alert.alert("Listes", "Restaurant introuvable.");
-                            return;
-                        }
-                        navigation.navigate("Lists", { pickForSiret: activeSiret });
+                        void openListsModal();
                     }}
                 />
 
@@ -444,6 +521,71 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                     }}
                 />
             </View>
+
+            <Modal
+                visible={listsModalOpen}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setListsModalOpen(false)}
+            >
+                <Pressable style={styles.modalBackdrop} onPress={() => setListsModalOpen(false)} />
+                <View style={styles.modalCard}>
+                    <View style={styles.modalHeader}>
+                        <Text style={styles.modalTitle}>Listes</Text>
+                        <TouchableOpacity onPress={() => setListsModalOpen(false)} accessibilityRole="button">
+                            <Text style={styles.modalClose}>Fermer</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    {listsLoading ? (
+                        <View style={{ paddingVertical: 18 }}>
+                            <ActivityIndicator />
+                        </View>
+                    ) : (
+                        <>
+                            <View style={styles.modalCreateRow}>
+                                <TextInput
+                                    value={newListName}
+                                    onChangeText={setNewListName}
+                                    placeholder="Nouvelle liste"
+                                    autoCapitalize="sentences"
+                                    style={styles.modalInput}
+                                />
+                                <TouchableOpacity
+                                    onPress={() => void createListAndAdd()}
+                                    style={styles.modalAddButton}
+                                    accessibilityRole="button"
+                                >
+                                    <Text style={styles.modalAddButtonText}>Créer</Text>
+                                </TouchableOpacity>
+                            </View>
+
+                            {lists.length ? (
+                                <View style={styles.modalList}>
+                                    {lists.map((l) => {
+                                        const enabled = listIdSet.has(l.id);
+                                        return (
+                                            <TouchableOpacity
+                                                key={l.id}
+                                                style={styles.modalListRow}
+                                                onPress={() => void toggleListMembership(l.id)}
+                                                accessibilityRole="button"
+                                            >
+                                                <Text style={styles.modalListName}>{l.name}</Text>
+                                                <View style={[styles.modalChip, enabled ? styles.modalChipOn : styles.modalChipOff]}>
+                                                    <Text style={styles.modalChipText}>{enabled ? "Ajouté" : "Ajouter"}</Text>
+                                                </View>
+                                            </TouchableOpacity>
+                                        );
+                                    })}
+                                </View>
+                            ) : (
+                                <Text style={styles.modalEmpty}>Aucune liste. Créez-en une ci-dessus.</Text>
+                            )}
+                        </>
+                    )}
+                </View>
+            </Modal>
         </ScrollView>
     );
 }
@@ -521,4 +663,67 @@ const styles = StyleSheet.create({
     reviewText: { color: "#222" },
     stars: { fontWeight: "800" },
     starsEmpty: { color: "#bbb" },
+    modalBackdrop: {
+        ...StyleSheet.absoluteFillObject,
+        backgroundColor: "rgba(0,0,0,0.35)",
+    },
+    modalCard: {
+        position: "absolute",
+        left: 16,
+        right: 16,
+        top: 120,
+        borderRadius: 14,
+        backgroundColor: "#fff",
+        borderWidth: 1,
+        borderColor: "#eee",
+        padding: 14,
+    },
+    modalHeader: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        marginBottom: 10,
+    },
+    modalTitle: { fontSize: 16, fontWeight: "800" },
+    modalClose: { fontWeight: "800", color: "#333" },
+    modalCreateRow: { flexDirection: "row", gap: 10, alignItems: "center", marginBottom: 12 },
+    modalInput: {
+        flex: 1,
+        borderWidth: 1,
+        borderColor: "#e5e5e5",
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        backgroundColor: "#fafafa",
+    },
+    modalAddButton: {
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderRadius: 12,
+        backgroundColor: "#111",
+    },
+    modalAddButtonText: { color: "#fff", fontWeight: "800" },
+    modalList: { gap: 8 },
+    modalListRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        paddingVertical: 10,
+        paddingHorizontal: 12,
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: "#eee",
+        backgroundColor: "#fff",
+    },
+    modalListName: { fontWeight: "800", color: "#222", flexShrink: 1, paddingRight: 10 },
+    modalChip: {
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 999,
+        borderWidth: 1,
+    },
+    modalChipOn: { backgroundColor: "#e7f8ee", borderColor: "#bfe8cf" },
+    modalChipOff: { backgroundColor: "#f2f2f2", borderColor: "#e3e3e3" },
+    modalChipText: { fontWeight: "800", color: "#222" },
+    modalEmpty: { color: "#444" },
 });
