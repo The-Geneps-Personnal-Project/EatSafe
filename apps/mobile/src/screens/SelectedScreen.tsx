@@ -13,6 +13,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 import type { RootStackParamList } from "../navigation/types";
 import { useAuth } from "../auth/authState";
 import { listRestaurantsInAnyList, type ListItemRow } from "../storage/lists";
+import { requestPinnedDetailsSync } from "../features/sync/pinnedSyncRequests";
 import { trackEvent } from "../telemetry/telemetry";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Selected">;
@@ -30,6 +31,7 @@ export default function SelectedScreen({ navigation }: Props) {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
+      requestPinnedDetailsSync("manual");
       const rows = await listRestaurantsInAnyList();
       setItems(rows);
     } finally {
@@ -39,8 +41,13 @@ export default function SelectedScreen({ navigation }: Props) {
 
   useEffect(() => {
     trackEvent({ name: "screen_view", props: { screen: "Selected" } });
+    requestPinnedDetailsSync("manual");
     void refresh();
   }, [refresh]);
+
+  const hasIncomplete = items.some(
+    (it) => !it.name?.trim() || !it.address?.trim() || !it.city?.trim()
+  );
 
   if (isGuest) {
     return (
@@ -63,6 +70,13 @@ export default function SelectedScreen({ navigation }: Props) {
 
   return (
     <View style={styles.container}>
+      {hasIncomplete ? (
+        <View style={styles.banner}>
+          <Text style={styles.bannerText}>
+            Certaines fiches sont en cours de téléchargement. Tirez pour rafraîchir.
+          </Text>
+        </View>
+      ) : null}
       <FlatList
         data={items}
         keyExtractor={(it) => it.siret}
@@ -80,11 +94,12 @@ export default function SelectedScreen({ navigation }: Props) {
           >
             <View style={styles.rowBody}>
               <Text style={styles.name} numberOfLines={1}>
-                {item.name || "Restaurant"}
+                {item.name?.trim() ? item.name : "Restaurant (en cours…)"}
               </Text>
               <Text style={styles.sub} numberOfLines={1}>
-                {item.address}
-                {item.city ? `, ${item.city}` : ""}
+                {item.address?.trim() || item.city?.trim()
+                  ? `${item.address || ""}${item.city ? `, ${item.city}` : ""}`
+                  : `SIRET: ${item.siret}`}
               </Text>
               <Text style={styles.sub}>Score: {item.sanitary_score ?? "—"}</Text>
             </View>
@@ -97,6 +112,14 @@ export default function SelectedScreen({ navigation }: Props) {
 
 const styles = StyleSheet.create({
   container: { flex: 1 },
+  banner: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    backgroundColor: "#fff7e6",
+    borderBottomWidth: 1,
+    borderBottomColor: "#f0c36d",
+  },
+  bannerText: { color: "#444", fontWeight: "700" },
   center: {
     flex: 1,
     alignItems: "center",
