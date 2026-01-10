@@ -59,6 +59,13 @@ export async function migrateDb(): Promise<void> {
         );
 
         CREATE INDEX IF NOT EXISTS idx_list_items_siret ON list_items (siret);
+
+        CREATE TABLE IF NOT EXISTS search_history (
+          query TEXT PRIMARY KEY NOT NULL,
+          last_used_at INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_search_history_last_used ON search_history (last_used_at);
     `);
 
   // Lightweight migration(s)

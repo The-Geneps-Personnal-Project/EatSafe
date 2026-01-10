@@ -10,6 +10,7 @@ import type { Restaurant } from "../types/restaurant";
 import { fetchRestaurantsByCity, searchRestaurants } from "../services/restaurantService";
 import { searchCities } from "../services/geoService";
 import { upsertMinimal } from "../storage/restaurantCache";
+import { addSearchQuery, clearSearchQueries, listSearchQueries } from "../storage/searchHistory";
 import { captureError, trackEvent } from "../telemetry/telemetry";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
@@ -128,6 +129,7 @@ export default function MapScreen({ navigation }: Props) {
 
     const [query, setQuery] = useState("");
     const [results, setResults] = useState<SearchItem[]>([]);
+    const [recentQueries, setRecentQueries] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
     const [citySearchUnavailable, setCitySearchUnavailable] = useState(false);
     const [moreOpen, setMoreOpen] = useState(false);
@@ -181,6 +183,19 @@ export default function MapScreen({ navigation }: Props) {
 
     useEffect(() => {
         trackEvent({ name: "screen_view", props: { screen: "Map" } });
+    }, []);
+
+    const refreshRecent = async () => {
+        try {
+            const rows = await listSearchQueries(10);
+            setRecentQueries(rows.map((r) => r.query));
+        } catch (e) {
+            captureError(e, { where: "MapScreen.refreshRecent" });
+        }
+    };
+
+    useEffect(() => {
+        void refreshRecent();
     }, []);
 
     useEffect(() => {
@@ -242,6 +257,9 @@ export default function MapScreen({ navigation }: Props) {
         if (q.length < 2) {
             setResults([]);
             setCitySearchUnavailable(false);
+            if (q.length === 0) {
+                void refreshRecent();
+            }
             return;
         }
 
@@ -250,6 +268,9 @@ export default function MapScreen({ navigation }: Props) {
             setCitySearchUnavailable(false);
 
             trackEvent({ name: "search_run", props: { q_len: q.length } });
+
+            // Persist in recent history (non-blocking).
+            void addSearchQuery(q).then(refreshRecent);
 
             const [dbRestaurants, citiesResult] = await Promise.all([
                 searchRestaurants(q),
@@ -469,6 +490,44 @@ export default function MapScreen({ navigation }: Props) {
                     <Text style={styles.hint}>Recherche de villes indisponible (API).</Text>
                 ) : null}
                 {loading && <ActivityIndicator />}
+
+                {results.length === 0 && query.trim().length === 0 && recentQueries.length > 0 ? (
+                    <View style={styles.results}>
+                        <View style={styles.recentHeaderRow}>
+                            <Text style={styles.recentTitle}>Recherches récentes</Text>
+                            <Pressable
+                                onPress={() => {
+                                    void (async () => {
+                                        trackEvent({ name: "search_recent_clear" });
+                                        await clearSearchQueries();
+                                        setRecentQueries([]);
+                                    })();
+                                }}
+                                style={styles.recentClearBtn}
+                            >
+                                <Text style={styles.recentClearText}>Effacer</Text>
+                            </Pressable>
+                        </View>
+
+                        <FlatList
+                            keyboardShouldPersistTaps="handled"
+                            data={recentQueries}
+                            keyExtractor={(q) => q}
+                            renderItem={({ item }) => (
+                                <Pressable
+                                    onPress={() => {
+                                        trackEvent({ name: "search_recent_select" });
+                                        setQuery(item);
+                                    }}
+                                    style={styles.row}
+                                >
+                                    <Text style={styles.rowTitle}>{item}</Text>
+                                    <Text style={styles.rowSub}>Rechercher</Text>
+                                </Pressable>
+                            )}
+                        />
+                    </View>
+                ) : null}
 
                 {results.length > 0 && (
                     <View style={styles.results}>
@@ -703,8 +762,25 @@ const styles = StyleSheet.create({
         borderTopWidth: 1,
         borderTopColor: "#eee"
     },
+    recentHeaderRow: {
+        flexDirection: "row",
+        alignItems: "center",
+        justifyContent: "space-between",
+        paddingHorizontal: 6,
+        paddingTop: 10,
+        paddingBottom: 8
+    },
+    recentTitle: { fontWeight: "800" },
+    recentClearBtn: {
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 999,
+        backgroundColor: "rgba(0,0,0,0.06)"
+    },
+    recentClearText: { fontWeight: "800" },
     row: {
-        paddingVertical: 10
+        paddingVertical: 10,
+        paddingHorizontal: 6
     },
     rowTitle: { fontWeight: "700" },
     rowSub: { color: "#666", marginTop: 2 },
