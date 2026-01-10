@@ -200,6 +200,14 @@ export async function evictExpired(): Promise<void> {
   );
 }
 
+export async function clearNonPinnedCache(): Promise<void> {
+  await migrateDb();
+  const db = await getDb();
+  await db.runAsync(
+    `DELETE FROM restaurant_cache WHERE bookmarked = 0 AND pinned = 0`
+  );
+}
+
 export async function listCachedForOfflineMap(
   limit = 250
 ): Promise<Restaurant[]> {

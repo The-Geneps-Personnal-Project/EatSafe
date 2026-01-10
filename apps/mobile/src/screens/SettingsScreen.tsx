@@ -6,10 +6,14 @@ import type { RootStackParamList } from "../navigation/types";
 import { useAuth } from "../auth/authState";
 import { useConsent } from "../features/consent/ConsentContext";
 import { saveConsent, type ConsentState } from "../features/consent/consentStorage";
+import { loadPushState, enablePush, disablePush } from "../features/notifications/pushManager";
+import { clearSearchQueries } from "../storage/searchHistory";
+import { clearNonPinnedCache } from "../storage/restaurantCache";
 import { getDevMockApiEnabled, setDevMockApiEnabled } from "../features/dev/devPrefs";
 import { seedDemoData } from "../dev/seedDemo";
 import { resetLocalData } from "../storage/debugReset";
 import { captureError, trackEvent } from "../telemetry/telemetry";
+import { toErrorMessage } from "../utils/errors";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Settings">;
 
@@ -18,10 +22,22 @@ export default function SettingsScreen({ navigation }: Props) {
   const { consent, setConsent } = useConsent();
 
   const [savingConsent, setSavingConsent] = useState(false);
+  const [pushEnabled, setPushEnabledState] = useState(false);
+  const [pushBusy, setPushBusy] = useState(false);
   const [mockApiEnabled, setMockApiEnabled] = useState(false);
 
   useEffect(() => {
     trackEvent({ name: "screen_view", props: { screen: "Settings" } });
+  }, []);
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        setPushEnabledState(await loadPushState());
+      } catch {
+        // ignore
+      }
+    })();
   }, []);
 
   useEffect(() => {
@@ -100,6 +116,33 @@ export default function SettingsScreen({ navigation }: Props) {
             disabled={savingConsent}
           />
         </View>
+
+        <View style={{ height: 12 }} />
+        <Text style={styles.sectionTitle}>Notifications</Text>
+        <View style={styles.row}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowTitle}>Alertes (compte requis)</Text>
+            <Text style={styles.rowSub}>Active les notifications après connexion.</Text>
+          </View>
+          <Switch value={false} disabled />
+        </View>
+
+        <View style={{ height: 12 }} />
+        <Text style={styles.sectionTitle}>Données</Text>
+        <Button
+          title="Vider les recherches récentes"
+          onPress={() => {
+            void (async () => {
+              try {
+                await clearSearchQueries();
+                Alert.alert("OK", "Recherches récentes supprimées.");
+              } catch (e) {
+                captureError(e, { where: "SettingsScreen.clearSearchQueries.guest" });
+                Alert.alert("Erreur", "Impossible pour le moment.");
+              }
+            })();
+          }}
+        />
       </View>
     );
   }
@@ -157,6 +200,104 @@ export default function SettingsScreen({ navigation }: Props) {
             disabled={savingConsent}
           />
         </View>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Notifications</Text>
+        <View style={styles.row}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.rowTitle}>Activer les notifications</Text>
+            <Text style={styles.rowSub}>Nécessite l’autorisation système.</Text>
+          </View>
+          <Switch
+            value={pushEnabled}
+            disabled={pushBusy}
+            onValueChange={(v) => {
+              void (async () => {
+                setPushBusy(true);
+                try {
+                  trackEvent({ name: "push_toggle", props: { enabled: v } });
+                  if (v) {
+                    const res = await enablePush();
+                    setPushEnabledState(res.enabled);
+                    if (!res.enabled) {
+                      Alert.alert(
+                        "Notifications",
+                        "Autorisation refusée ou appareil non compatible."
+                      );
+                    } else {
+                      Alert.alert("Notifications", "Activées.");
+                    }
+                  } else {
+                    await disablePush();
+                    setPushEnabledState(false);
+                    Alert.alert("Notifications", "Désactivées.");
+                  }
+                } catch (e) {
+                  captureError(e, { where: "SettingsScreen.pushToggle" });
+                  Alert.alert(
+                    "Notifications",
+                    __DEV__ ? toErrorMessage(e) : "Impossible de modifier pour le moment."
+                  );
+                } finally {
+                  setPushBusy(false);
+                }
+              })();
+            }}
+          />
+        </View>
+        <Text style={styles.hint}>Note: sur Expo Go, les notifications peuvent être limitées.</Text>
+      </View>
+
+      <View style={styles.card}>
+        <Text style={styles.sectionTitle}>Données & offline</Text>
+
+        <Button
+          title="Vider le cache (hors favoris/listes)"
+          onPress={() => {
+            Alert.alert(
+              "Cache",
+              "Supprimer le cache local des restaurants (hors favoris et listes) ?",
+              [
+                { text: "Annuler", style: "cancel" },
+                {
+                  text: "Vider",
+                  style: "destructive",
+                  onPress: () => {
+                    void (async () => {
+                      try {
+                        trackEvent({ name: "cache_clear_non_pinned" });
+                        await clearNonPinnedCache();
+                        Alert.alert("Cache", "OK.");
+                      } catch (e) {
+                        captureError(e, { where: "SettingsScreen.clearNonPinnedCache" });
+                        Alert.alert("Cache", __DEV__ ? toErrorMessage(e) : "Échec.");
+                      }
+                    })();
+                  },
+                },
+              ]
+            );
+          }}
+        />
+
+        <View style={{ height: 8 }} />
+
+        <Button
+          title="Vider les recherches récentes"
+          onPress={() => {
+            void (async () => {
+              try {
+                trackEvent({ name: "search_recent_clear_settings" });
+                await clearSearchQueries();
+                Alert.alert("OK", "Recherches récentes supprimées.");
+              } catch (e) {
+                captureError(e, { where: "SettingsScreen.clearSearchQueries" });
+                Alert.alert("Erreur", __DEV__ ? toErrorMessage(e) : "Impossible pour le moment.");
+              }
+            })();
+          }}
+        />
       </View>
 
       {__DEV__ ? (
@@ -270,6 +411,7 @@ const styles = StyleSheet.create({
   },
   rowTitle: { fontWeight: "800" },
   rowSub: { color: "#666" },
+  hint: { color: "#666", fontSize: 12 },
   linkRow: {
     paddingVertical: 10,
     borderTopWidth: 1,
