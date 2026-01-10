@@ -99,6 +99,15 @@ export async function addRestaurantToList(
     [listId, siret, now]
   );
 
+  // Ensure a cache row exists so the pinned sync can later hydrate full details.
+  // (restaurant_cache has NOT NULL fields, so we insert a minimal placeholder.)
+  await db.runAsync(
+    `INSERT OR IGNORE INTO restaurant_cache (
+        siret, public_id, name, address, city, sanitary_score, lat, lng, details_json, bookmarked, last_viewed_at
+     ) VALUES (?, NULL, '', '', '', NULL, NULL, NULL, NULL, 0, ?)`,
+    [siret, now]
+  );
+
   // Keep list items pinned so they don't expire from cache.
   await db.runAsync(`UPDATE restaurant_cache SET pinned = 1 WHERE siret = ?`, [
     siret,
