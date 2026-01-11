@@ -147,6 +147,8 @@ export type ListItemRow = {
   address: string;
   city: string;
   sanitary_score: number | null;
+  note_rating: number | null;
+  note_text: string | null;
   created_at: number;
 };
 
@@ -161,9 +163,12 @@ export async function listRestaurantsInList(
             COALESCE(rc.address, '') as address,
             COALESCE(rc.city, '') as city,
             rc.sanitary_score as sanitary_score,
+            rn.rating as note_rating,
+            rn.note as note_text,
             li.created_at as created_at
      FROM list_items li
      LEFT JOIN restaurant_cache rc ON rc.siret = li.siret
+     LEFT JOIN restaurant_notes rn ON rn.siret = li.siret
      WHERE li.list_id = ?
      ORDER BY li.created_at DESC`,
     [listId]
@@ -180,9 +185,12 @@ export async function listRestaurantsInAnyList(): Promise<ListItemRow[]> {
             COALESCE(rc.address, '') as address,
             COALESCE(rc.city, '') as city,
             rc.sanitary_score as sanitary_score,
+          rn.rating as note_rating,
+          rn.note as note_text,
             MAX(li.created_at) as created_at
      FROM list_items li
      LEFT JOIN restaurant_cache rc ON rc.siret = li.siret
+      LEFT JOIN restaurant_notes rn ON rn.siret = li.siret
      GROUP BY li.siret
      ORDER BY MAX(li.created_at) DESC`
   );

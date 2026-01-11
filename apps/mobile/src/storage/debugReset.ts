@@ -10,5 +10,6 @@ export async function resetLocalData(): Promise<void> {
   await db.runAsync(`DELETE FROM visited`);
   await db.runAsync(`DELETE FROM bookmarks`);
   await db.runAsync(`DELETE FROM search_history`);
+  await db.runAsync(`DELETE FROM restaurant_notes`);
   await db.runAsync(`DELETE FROM restaurant_cache`);
 }

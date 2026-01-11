@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import { ActivityIndicator, Alert, Button, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from "react-native";
 import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
@@ -16,6 +16,8 @@ import { buildShareUrl, ensurePublicIdForSiret } from "../services/shareService"
 import { copyText, shareLink } from "../utils/share";
 import { toErrorMessage } from "../utils/errors";
 import { captureError, trackEvent } from "../telemetry/telemetry";
+import { isDemoMode } from "../config/mode";
+import { deleteRestaurantNote, getRestaurantNote, upsertRestaurantNote } from "../storage/notes";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Restaurant">;
 
@@ -48,6 +50,7 @@ export default function RestaurantScreen({ navigation, route }: Props) {
     const { publicId, siret } = route.params ?? {};
     const { isGuest } = useAuth();
     const { isOnline } = useNetwork();
+    const demoMode = isDemoMode();
 
     const [loading, setLoading] = useState(true);
     const [loadError, setLoadError] = useState<string | null>(null);
@@ -68,6 +71,16 @@ export default function RestaurantScreen({ navigation, route }: Props) {
     const [lists, setLists] = useState<ListRow[]>([]);
     const [listIdSet, setListIdSet] = useState<Set<number>>(new Set());
     const [newListName, setNewListName] = useState("");
+
+    const [noteModalOpen, setNoteModalOpen] = useState(false);
+    const [noteSaving, setNoteSaving] = useState(false);
+    const [noteDraft, setNoteDraft] = useState("");
+    const [ratingDraft, setRatingDraft] = useState<number | null>(null);
+    const [savedNote, setSavedNote] = useState<{
+        rating: number | null;
+        note: string;
+        updated_at: number;
+    } | null>(null);
 
     const title = useMemo(() => restaurant?.name ?? "Restaurant", [restaurant?.name]);
 
@@ -244,6 +257,20 @@ export default function RestaurantScreen({ navigation, route }: Props) {
 
     const activeSiret = restaurant?.siret ?? minimalOffline?.siret ?? siret;
 
+    const refreshSavedNote = useCallback(async () => {
+        if (!activeSiret) return;
+        try {
+            const row = await getRestaurantNote(activeSiret);
+            setSavedNote(row ? { rating: row.rating, note: row.note, updated_at: row.updated_at } : null);
+        } catch (e) {
+            captureError(e, { where: "RestaurantScreen.refreshSavedNote" });
+        }
+    }, [activeSiret]);
+
+    useEffect(() => {
+        void refreshSavedNote();
+    }, [refreshSavedNote]);
+
     const refreshListsState = async (forSiret: string) => {
         setListsLoading(true);
         try {
@@ -256,7 +283,7 @@ export default function RestaurantScreen({ navigation, route }: Props) {
     };
 
     const openListsModal = async () => {
-        if (isGuest && !__DEV__) {
+        if (isGuest && !demoMode) {
             trackEvent({ name: "guest_blocked_action", props: { action: "lists" } });
             navigation.navigate("Auth");
             return;
@@ -273,6 +300,56 @@ export default function RestaurantScreen({ navigation, route }: Props) {
         } catch (e) {
             captureError(e, { where: "RestaurantScreen.openListsModal" });
             Alert.alert("Listes", toErrorMessage(e));
+        }
+    };
+
+    const openNoteModal = async () => {
+        if (isGuest && !demoMode) {
+            trackEvent({ name: "guest_blocked_action", props: { action: "note" } });
+            navigation.navigate("Auth");
+            return;
+        }
+        if (!activeSiret) {
+            Alert.alert("Ma note", "Restaurant introuvable.");
+            return;
+        }
+
+        try {
+            const row = await getRestaurantNote(activeSiret);
+            setNoteDraft(row?.note ?? "");
+            setRatingDraft(row?.rating ?? null);
+        } catch (e) {
+            captureError(e, { where: "RestaurantScreen.openNoteModal" });
+        }
+
+        trackEvent({ name: "note_modal_open" });
+        setNoteModalOpen(true);
+    };
+
+    const saveNote = async () => {
+        if (!activeSiret) return;
+        setNoteSaving(true);
+        try {
+            const text = noteDraft.trim();
+            const rating = ratingDraft;
+
+            if (!text && (rating === null || rating === undefined)) {
+                await deleteRestaurantNote(activeSiret);
+                setSavedNote(null);
+                setNoteModalOpen(false);
+                trackEvent({ name: "note_deleted" });
+                return;
+            }
+
+            await upsertRestaurantNote(activeSiret, rating ?? null, text);
+            await refreshSavedNote();
+            setNoteModalOpen(false);
+            trackEvent({ name: "note_saved", props: { hasText: Boolean(text), rating: rating ?? null } });
+        } catch (e) {
+            captureError(e, { where: "RestaurantScreen.saveNote" });
+            Alert.alert("Ma note", "Impossible d’enregistrer la note.");
+        } finally {
+            setNoteSaving(false);
         }
     };
 
@@ -327,7 +404,7 @@ export default function RestaurantScreen({ navigation, route }: Props) {
     };
 
     const toggleBookmark = async () => {
-        if (isGuest && !__DEV__) {
+        if (isGuest && !demoMode) {
             trackEvent({ name: "guest_blocked_action", props: { action: "bookmark" } });
             navigation.navigate("Auth");
             return;
@@ -358,7 +435,7 @@ export default function RestaurantScreen({ navigation, route }: Props) {
     };
 
     const toggleVisited = async () => {
-        if (isGuest && !__DEV__) {
+        if (isGuest && !demoMode) {
             trackEvent({ name: "guest_blocked_action", props: { action: "visited" } });
             navigation.navigate("Auth");
             return;
@@ -393,16 +470,16 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                         <Text style={styles.metaPillText}>Inspecté: {inspectionDate}</Text>
                     </View>
                 ) : null}
-                {restaurant?.opening_hours && !isGuest ? (
+                {restaurant?.opening_hours && (!isGuest || demoMode) ? (
                     <View style={[styles.metaPill, restaurant.opening_hours.open_now ? styles.metaPillOpen : styles.metaPillClosed]}>
                         <Text style={styles.metaPillText}>{restaurant.opening_hours.open_now ? "Ouvert" : "Fermé"}</Text>
                     </View>
                 ) : null}
             </View>
 
-            {isGuest && !__DEV__ ? <RestrictedInfo /> : null}
+            {isGuest && !demoMode ? <RestrictedInfo /> : null}
 
-            {restaurant?.opening_hours && !isGuest ? (
+            {restaurant?.opening_hours && (!isGuest || demoMode) ? (
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Horaires</Text>
                     {restaurant.opening_hours.weekdayDescriptions?.length ? (
@@ -415,7 +492,7 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                 </View>
             ) : null}
 
-            {restaurant?.photos && !isGuest ? (
+            {restaurant?.photos && (!isGuest || demoMode) ? (
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Photos</Text>
                     {restaurant.photos.some((p) => "url" in p && Boolean((p as any).url)) ? (
@@ -437,7 +514,7 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                 </View>
             ) : null}
 
-            {restaurant?.reviews && !isGuest ? (
+            {restaurant?.reviews && (!isGuest || demoMode) ? (
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>Avis</Text>
                     {restaurant.reviews.length ? (
@@ -477,10 +554,21 @@ export default function RestaurantScreen({ navigation, route }: Props) {
             ) : null}
 
             <View style={styles.section}>
+                {savedNote ? (
+                    <View style={styles.noteSummary}>
+                        <Text style={styles.noteSummaryTitle}>Ma note</Text>
+                        <Text style={styles.noteSummaryBody} numberOfLines={2}>
+                            {savedNote.rating ? `Note: ${savedNote.rating}/5` : ""}
+                            {savedNote.rating && savedNote.note ? " · " : ""}
+                            {savedNote.note ? savedNote.note : ""}
+                        </Text>
+                    </View>
+                ) : null}
+
                 <Button
-                    title={isGuest && __DEV__
-                        ? (bookmarked ? "Retirer des favoris (local dev)" : "Ajouter aux favoris (local dev)")
-                        : (isGuest ? "Favoris (compte requis)" : (bookmarked ? "Retirer des favoris" : "Ajouter aux favoris"))}
+                    title={isGuest && !demoMode
+                        ? "Favoris (compte requis)"
+                        : (bookmarked ? "Retirer des favoris" : "Ajouter aux favoris")}
                     onPress={() => {
                         void toggleBookmark();
                     }}
@@ -489,9 +577,9 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                 <View style={{ height: 10 }} />
 
                 <Button
-                    title={isGuest && __DEV__
-                        ? (visited ? "Visité ✅ (local dev)" : "J’ai visité (local dev)")
-                        : (isGuest ? "J’ai visité (compte requis)" : (visited ? "Visité ✅" : "J’ai visité"))}
+                    title={isGuest && !demoMode
+                        ? "J’ai visité (compte requis)"
+                        : (visited ? "Visité ✅" : "J’ai visité")}
                     onPress={() => {
                         void toggleVisited();
                     }}
@@ -500,9 +588,18 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                 <View style={{ height: 10 }} />
 
                 <Button
-                    title={isGuest && __DEV__ ? "Ajouter à une liste (local dev)" : (isGuest ? "Ajouter à une liste (compte requis)" : "Ajouter à une liste")}
+                    title={isGuest && !demoMode ? "Ajouter à une liste (compte requis)" : "Ajouter à une liste"}
                     onPress={() => {
                         void openListsModal();
+                    }}
+                />
+
+                <View style={{ height: 10 }} />
+
+                <Button
+                    title={isGuest && !demoMode ? "Ma note (compte requis)" : (savedNote ? "Modifier ma note" : "Ajouter une note")}
+                    onPress={() => {
+                        void openNoteModal();
                     }}
                 />
 
@@ -596,6 +693,88 @@ export default function RestaurantScreen({ navigation, route }: Props) {
                             )}
                         </>
                     )}
+                </View>
+            </Modal>
+
+            <Modal
+                visible={noteModalOpen}
+                transparent
+                animationType="fade"
+                onRequestClose={() => setNoteModalOpen(false)}
+            >
+                <Pressable style={styles.modalBackdrop} onPress={() => setNoteModalOpen(false)} />
+                <View style={styles.modalCard}>
+                    <View style={styles.modalHeader}>
+                        <Text style={styles.modalTitle}>Ma note</Text>
+                        <TouchableOpacity onPress={() => setNoteModalOpen(false)} accessibilityRole="button">
+                            <Text style={styles.modalClose}>Fermer</Text>
+                        </TouchableOpacity>
+                    </View>
+
+                    <Text style={styles.modalHint}>Note (optionnel)</Text>
+                    <View style={styles.ratingRow}>
+                        {[1, 2, 3, 4, 5].map((n) => {
+                            const on = ratingDraft === n;
+                            return (
+                                <TouchableOpacity
+                                    key={n}
+                                    onPress={() => setRatingDraft(on ? null : n)}
+                                    style={[styles.ratingChip, on ? styles.ratingChipOn : styles.ratingChipOff]}
+                                    accessibilityRole="button"
+                                >
+                                    <Text style={[styles.ratingChipText, on ? styles.ratingChipTextOn : styles.ratingChipTextOff]}>{n}</Text>
+                                </TouchableOpacity>
+                            );
+                        })}
+                    </View>
+
+                    <Text style={styles.modalHint}>Commentaire (optionnel)</Text>
+                    <TextInput
+                        value={noteDraft}
+                        onChangeText={setNoteDraft}
+                        placeholder="Ex: Plutôt propre, service ok, à retenter..."
+                        style={styles.noteInput}
+                        multiline
+                    />
+
+                    <View style={{ height: 12 }} />
+                    <View style={styles.modalActionsRow}>
+                        <TouchableOpacity
+                            onPress={() => {
+                                void (async () => {
+                                    if (!activeSiret) return;
+                                    try {
+                                        setNoteSaving(true);
+                                        await deleteRestaurantNote(activeSiret);
+                                        setSavedNote(null);
+                                        setNoteDraft("");
+                                        setRatingDraft(null);
+                                        setNoteModalOpen(false);
+                                        trackEvent({ name: "note_deleted" });
+                                    } catch (e) {
+                                        captureError(e, { where: "RestaurantScreen.deleteNote" });
+                                        Alert.alert("Ma note", "Impossible de supprimer la note.");
+                                    } finally {
+                                        setNoteSaving(false);
+                                    }
+                                })();
+                            }}
+                            style={[styles.modalActionBtn, styles.modalActionBtnDanger]}
+                            accessibilityRole="button"
+                            disabled={noteSaving}
+                        >
+                            <Text style={styles.modalActionBtnText}>Supprimer</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                            onPress={() => void saveNote()}
+                            style={[styles.modalActionBtn, styles.modalActionBtnPrimary]}
+                            accessibilityRole="button"
+                            disabled={noteSaving}
+                        >
+                            <Text style={styles.modalActionBtnText}>{noteSaving ? "Enregistrement…" : "Enregistrer"}</Text>
+                        </TouchableOpacity>
+                    </View>
                 </View>
             </Modal>
         </ScrollView>
@@ -738,4 +917,50 @@ const styles = StyleSheet.create({
     modalChipOff: { backgroundColor: "#f2f2f2", borderColor: "#e3e3e3" },
     modalChipText: { fontWeight: "800", color: "#222" },
     modalEmpty: { color: "#444" },
+
+    noteSummary: {
+        padding: 12,
+        borderRadius: 12,
+        backgroundColor: "#f8fafc",
+        borderWidth: 1,
+        borderColor: "#e5e7eb",
+        gap: 4,
+    },
+    noteSummaryTitle: { fontWeight: "800", color: "#111" },
+    noteSummaryBody: { color: "#444" },
+
+    modalHint: { color: "#444", fontWeight: "700", marginBottom: 6 },
+    ratingRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
+    ratingChip: {
+        width: 36,
+        height: 36,
+        borderRadius: 10,
+        alignItems: "center",
+        justifyContent: "center",
+        borderWidth: 1,
+    },
+    ratingChipOn: { backgroundColor: "#111", borderColor: "#111" },
+    ratingChipOff: { backgroundColor: "#fff", borderColor: "#e5e5e5" },
+    ratingChipText: { fontWeight: "800" },
+    ratingChipTextOn: { color: "#fff" },
+    ratingChipTextOff: { color: "#111" },
+    noteInput: {
+        borderWidth: 1,
+        borderColor: "#e5e5e5",
+        borderRadius: 12,
+        paddingHorizontal: 12,
+        paddingVertical: 10,
+        backgroundColor: "#fafafa",
+        minHeight: 110,
+        textAlignVertical: "top",
+    },
+    modalActionsRow: { flexDirection: "row", gap: 10, justifyContent: "flex-end" },
+    modalActionBtn: {
+        paddingHorizontal: 14,
+        paddingVertical: 10,
+        borderRadius: 12,
+    },
+    modalActionBtnPrimary: { backgroundColor: "#111" },
+    modalActionBtnDanger: { backgroundColor: "#b00020" },
+    modalActionBtnText: { color: "#fff", fontWeight: "800" },
 });

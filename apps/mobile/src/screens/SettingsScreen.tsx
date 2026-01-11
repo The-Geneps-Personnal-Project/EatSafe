@@ -13,12 +13,15 @@ import { seedDemoData } from "../dev/seedDemo";
 import { resetLocalData } from "../storage/debugReset";
 import { captureError, trackEvent } from "../telemetry/telemetry";
 import { toErrorMessage } from "../utils/errors";
+import { isDemoMode } from "../config/mode";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Settings">;
 
 export default function SettingsScreen({ navigation }: Props) {
   const { user, isGuest, logout, firebaseEnabled, firebaseDisabledReason } = useAuth();
   const { consent, setConsent } = useConsent();
+
+  const demoMode = isDemoMode();
 
   const [savingConsent, setSavingConsent] = useState(false);
   const [pushEnabled, setPushEnabledState] = useState(false);
@@ -171,7 +174,7 @@ export default function SettingsScreen({ navigation }: Props) {
           />
         </View>
 
-        {__DEV__ ? (
+        {demoMode ? (
           <View style={styles.card}>
             <Text style={styles.sectionTitle}>Dev</Text>
 
@@ -391,7 +394,7 @@ export default function SettingsScreen({ navigation }: Props) {
         />
       </View>
 
-      {__DEV__ ? (
+      {demoMode ? (
         <View style={styles.card}>
           <Text style={styles.sectionTitle}>Dev</Text>
 

@@ -17,11 +17,13 @@ import {
   type VisitedRow,
 } from "../storage/visitedQuery";
 import { captureError, trackEvent } from "../telemetry/telemetry";
+import { isDemoMode } from "../config/mode";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Visited">;
 
 export default function VisitedScreen({ navigation }: Props) {
   const { isGuest } = useAuth();
+  const demoMode = isDemoMode();
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<VisitedRow[]>([]);
 
@@ -30,9 +32,9 @@ export default function VisitedScreen({ navigation }: Props) {
   }, []);
 
   useEffect(() => {
-    if (!isGuest || __DEV__) return;
+    if (!isGuest || demoMode) return;
     trackEvent({ name: "guest_blocked_view", props: { screen: "Visited" } });
-  }, [isGuest]);
+  }, [demoMode, isGuest]);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -52,7 +54,7 @@ export default function VisitedScreen({ navigation }: Props) {
     void refresh();
   }, [refresh]);
 
-  if (isGuest && !__DEV__) {
+  if (isGuest && !demoMode) {
     return (
       <View style={styles.center}>
         <Text style={styles.title}>Historique</Text>
@@ -102,6 +104,13 @@ export default function VisitedScreen({ navigation }: Props) {
               <Text style={styles.name} numberOfLines={1}>
                 {item.name || "Restaurant"}
               </Text>
+              {item.note_rating !== null || (item.note_text && item.note_text.trim()) ? (
+                <View style={styles.badgesRow}>
+                  <Text style={styles.noteBadge} numberOfLines={1}>
+                    {item.note_rating !== null ? `Ma note: ${item.note_rating}/5` : "Ma note"}
+                  </Text>
+                </View>
+              ) : null}
               <Text style={styles.sub} numberOfLines={1}>
                 {item.address}
                 {item.city ? `, ${item.city}` : ""}
@@ -143,5 +152,17 @@ const styles = StyleSheet.create({
   },
   rowBody: { flex: 1, gap: 2 },
   name: { fontWeight: "800" },
+  badgesRow: { flexDirection: "row", gap: 8, marginTop: 2 },
+  noteBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#eef2ff",
+    borderWidth: 1,
+    borderColor: "#c7d2fe",
+    color: "#3730a3",
+    fontWeight: "800",
+  },
   sub: { color: "#666" },
 });

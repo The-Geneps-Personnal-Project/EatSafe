@@ -1,4 +1,5 @@
 import type { Restaurant, RestaurantDetails } from "../types/restaurant";
+import { isDemoMode } from "../config/mode";
 import {
   mockCities,
   mockDetailsBySiret,
@@ -11,8 +12,8 @@ function normalize(s: string) {
 }
 
 export async function shouldUseMockApi(): Promise<boolean> {
-  // In dev we force mock everywhere to avoid API hangs/timeouts.
-  return __DEV__ ? true : false;
+  // In demo mode we force mock everywhere to avoid API hangs/timeouts.
+  return isDemoMode();
 }
 
 export async function mockSearchCities(query: string) {

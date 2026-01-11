@@ -66,6 +66,15 @@ export async function migrateDb(): Promise<void> {
         );
 
         CREATE INDEX IF NOT EXISTS idx_search_history_last_used ON search_history (last_used_at);
+
+        CREATE TABLE IF NOT EXISTS restaurant_notes (
+          siret TEXT PRIMARY KEY NOT NULL,
+          rating INTEGER,
+          note TEXT NOT NULL,
+          updated_at INTEGER NOT NULL
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_restaurant_notes_updated_at ON restaurant_notes (updated_at);
     `);
 
   // Lightweight migration(s)

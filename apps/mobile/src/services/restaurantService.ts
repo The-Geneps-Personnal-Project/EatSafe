@@ -14,7 +14,7 @@ export async function searchRestaurants(query: string): Promise<Restaurant[]> {
   try {
     return await http.get<Restaurant[]>(`/restaurants/search?q=${q}`);
   } catch (e) {
-    if (__DEV__) return await mockSearchRestaurants(query);
+    if (await shouldUseMockApi()) return await mockSearchRestaurants(query);
     throw e;
   }
 }
@@ -28,7 +28,8 @@ export async function fetchRestaurantDetailBySiret(
   try {
     return await http.get<RestaurantDetails>(`/restaurants/detail?siret=${q}`);
   } catch (e) {
-    if (__DEV__) return await mockFetchRestaurantDetailBySiret(siret);
+    if (await shouldUseMockApi())
+      return await mockFetchRestaurantDetailBySiret(siret);
     throw e;
   }
 }
@@ -42,7 +43,8 @@ export async function fetchRestaurantDetailByPublicId(
   try {
     return await http.get<RestaurantDetails>(`/restaurants/public/${q}`);
   } catch (e) {
-    if (__DEV__) return await mockFetchRestaurantDetailByPublicId(publicId);
+    if (await shouldUseMockApi())
+      return await mockFetchRestaurantDetailByPublicId(publicId);
     throw e;
   }
 }
@@ -55,7 +57,7 @@ export async function fetchRestaurantsByCity(
   try {
     return await http.get<Restaurant[]>(`/restaurants?city=${q}`);
   } catch (e) {
-    if (__DEV__) return await mockFetchRestaurantsByCity(city);
+    if (await shouldUseMockApi()) return await mockFetchRestaurantsByCity(city);
     throw e;
   }
 }
