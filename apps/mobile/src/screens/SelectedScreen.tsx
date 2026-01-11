@@ -15,11 +15,13 @@ import { useAuth } from "../auth/authState";
 import { listRestaurantsInAnyList, type ListItemRow } from "../storage/lists";
 import { requestPinnedDetailsSync } from "../features/sync/pinnedSyncRequests";
 import { trackEvent } from "../telemetry/telemetry";
+import { isDemoMode } from "../config/mode";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Selected">;
 
 export default function SelectedScreen({ navigation }: Props) {
   const { isGuest } = useAuth();
+  const demoMode = isDemoMode();
 
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<ListItemRow[]>([]);
@@ -49,7 +51,7 @@ export default function SelectedScreen({ navigation }: Props) {
     (it) => !it.name?.trim() || !it.address?.trim() || !it.city?.trim()
   );
 
-  if (isGuest && !__DEV__) {
+  if (isGuest && !demoMode) {
     return (
       <View style={styles.center}>
         <Text style={styles.title}>Sélectionnés</Text>
@@ -96,6 +98,13 @@ export default function SelectedScreen({ navigation }: Props) {
               <Text style={styles.name} numberOfLines={1}>
                 {item.name?.trim() ? item.name : "Restaurant (en cours…)"}
               </Text>
+              {item.note_rating !== null || (item.note_text && item.note_text.trim()) ? (
+                <View style={styles.badgesRow}>
+                  <Text style={styles.noteBadge} numberOfLines={1}>
+                    {item.note_rating !== null ? `Ma note: ${item.note_rating}/5` : "Ma note"}
+                  </Text>
+                </View>
+              ) : null}
               <Text style={styles.sub} numberOfLines={1}>
                 {item.address?.trim() || item.city?.trim()
                   ? `${item.address || ""}${item.city ? `, ${item.city}` : ""}`
@@ -137,5 +146,17 @@ const styles = StyleSheet.create({
   },
   rowBody: { gap: 2 },
   name: { fontWeight: "800" },
+  badgesRow: { flexDirection: "row", gap: 8, marginTop: 2 },
+  noteBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#eef2ff",
+    borderWidth: 1,
+    borderColor: "#c7d2fe",
+    color: "#3730a3",
+    fontWeight: "800",
+  },
   sub: { color: "#666" },
 });

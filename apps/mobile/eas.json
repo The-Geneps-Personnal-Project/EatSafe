@@ -8,8 +8,30 @@
       "developmentClient": true,
       "distribution": "internal"
     },
+    "development-simulator": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "ios": {
+        "simulator": true
+      }
+    },
     "preview": {
       "distribution": "internal"
+    },
+    "mvp": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_FORCE_MOCK_API": "1"
+      }
+    },
+    "mvp-simulator": {
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_FORCE_MOCK_API": "1"
+      },
+      "ios": {
+        "simulator": true
+      }
     },
     "production": {
       "autoIncrement": true

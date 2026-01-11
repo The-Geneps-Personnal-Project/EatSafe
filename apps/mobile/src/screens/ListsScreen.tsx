@@ -14,6 +14,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import type { RootStackParamList } from "../navigation/types";
 import { useAuth } from "../auth/authState";
+import { isDemoMode } from "../config/mode";
 import {
   addRestaurantToList,
   createList,
@@ -31,6 +32,7 @@ export default function ListsScreen({ navigation, route }: Props) {
   const pickForSiret = route.params?.pickForSiret;
   const { isGuest } = useAuth();
 
+  const demoMode = isDemoMode();
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<ListWithCountRow[]>([]);
   const [newName, setNewName] = useState("");
@@ -114,7 +116,7 @@ export default function ListsScreen({ navigation, route }: Props) {
     );
   }, [loading]);
 
-  if (isGuest && !__DEV__) {
+  if (isGuest && !demoMode) {
     return (
       <View style={styles.center}>
         <Text style={styles.title}>Listes</Text>

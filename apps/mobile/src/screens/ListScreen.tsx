@@ -14,6 +14,7 @@ import type { NativeStackScreenProps } from "@react-navigation/native-stack";
 
 import type { RootStackParamList } from "../navigation/types";
 import { useAuth } from "../auth/authState";
+import { isDemoMode } from "../config/mode";
 import {
   deleteList,
   listRestaurantsInList,
@@ -28,12 +29,13 @@ type Props = NativeStackScreenProps<RootStackParamList, "List">;
 export default function ListScreen({ navigation, route }: Props) {
   const { listId, name } = route.params;
   const { isGuest } = useAuth();
+  const demoMode = isDemoMode();
 
   const [loading, setLoading] = useState(true);
   const [items, setItems] = useState<ListItemRow[]>([]);
 
   useLayoutEffect(() => {
-    if (isGuest && !__DEV__) {
+    if (isGuest && !demoMode) {
       navigation.setOptions({ title: name, headerRight: undefined });
       return;
     }
@@ -92,7 +94,7 @@ export default function ListScreen({ navigation, route }: Props) {
     (it) => !it.name?.trim() || !it.address?.trim() || !it.city?.trim()
   );
 
-  if (isGuest && !__DEV__) {
+  if (isGuest && !demoMode) {
     return (
       <View style={styles.center}>
         <Text style={styles.title}>Liste</Text>
@@ -168,6 +170,13 @@ export default function ListScreen({ navigation, route }: Props) {
                     ? `${item.address || ""}${item.city ? `, ${item.city}` : ""}`
                     : `SIRET: ${item.siret}`}
                 </Text>
+                {item.note_rating !== null || (item.note_text && item.note_text.trim()) ? (
+                  <View style={styles.badgesRow}>
+                    <Text style={styles.noteBadge} numberOfLines={1}>
+                      {item.note_rating !== null ? `Ma note: ${item.note_rating}/5` : "Ma note"}
+                    </Text>
+                  </View>
+                ) : null}
                 <Text style={styles.sub}>Score: {item.sanitary_score ?? "—"}</Text>
               </View>
             </Pressable>
@@ -279,10 +288,27 @@ const styles = StyleSheet.create({
   iconBtnDanger: {
     backgroundColor: "#fee2e2",
   },
+  iconText: {
+    fontWeight: "900",
+    fontSize: 16,
+    lineHeight: 16,
+  },
   iconTextDanger: {
     color: "#b00020",
   },
   rowBody: { gap: 2 },
   name: { fontWeight: "800" },
+  badgesRow: { flexDirection: "row", gap: 8, marginTop: 2 },
+  noteBadge: {
+    alignSelf: "flex-start",
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: "#eef2ff",
+    borderWidth: 1,
+    borderColor: "#c7d2fe",
+    color: "#3730a3",
+    fontWeight: "800",
+  },
   sub: { color: "#666" },
 });

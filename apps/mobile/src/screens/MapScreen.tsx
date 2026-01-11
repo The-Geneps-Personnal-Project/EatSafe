@@ -13,6 +13,8 @@ import { listCachedForOfflineMap, listCachedRecentlyViewedForMap, loadCachedMini
 import { addSearchQuery, clearSearchQueries, listSearchQueries } from "../storage/searchHistory";
 import { useNetwork } from "../hooks/useNetwork";
 import { captureError, trackEvent } from "../telemetry/telemetry";
+import { isDemoMode } from "../config/mode";
+import { mockCities } from "../dev/mockData";
 
 type Props = NativeStackScreenProps<RootStackParamList, "Map">;
 
@@ -22,6 +24,18 @@ type SearchItem =
 
 function normalizeText(s: string) {
     return s.trim().toLowerCase();
+}
+
+function nearestMockCityName(lat: number, lng: number): string | null {
+    if (!mockCities.length) return null;
+    let best: { name: string; d2: number } | null = null;
+    for (const c of mockCities) {
+        const dLat = c.lat - lat;
+        const dLng = c.lng - lng;
+        const d2 = dLat * dLat + dLng * dLng;
+        if (!best || d2 < best.d2) best = { name: c.city, d2 };
+    }
+    return best?.name ?? null;
 }
 
 type MapMarker =
@@ -307,6 +321,9 @@ export default function MapScreen({ navigation, route }: Props) {
     }, []);
 
     const reverseCityFromLatLng = async (lat: number, lng: number): Promise<string | null> => {
+        if (isDemoMode()) {
+            return nearestMockCityName(lat, lng);
+        }
         const url = `https://api-adresse.data.gouv.fr/reverse/?lon=${encodeURIComponent(lng)}&lat=${encodeURIComponent(lat)}`;
         try {
             const res = await fetch(url);

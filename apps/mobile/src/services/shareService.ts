@@ -17,7 +17,8 @@ export async function ensurePublicIdForSiret(siret: string): Promise<string> {
     if (!id) throw new Error("publicId manquant");
     return id;
   } catch (e) {
-    if (__DEV__) return await mockEnsurePublicIdForSiret(siret);
+    if (await shouldUseMockApi())
+      return await mockEnsurePublicIdForSiret(siret);
     throw e;
   }
 }

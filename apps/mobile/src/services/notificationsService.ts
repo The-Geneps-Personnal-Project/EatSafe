@@ -2,6 +2,7 @@ import * as Notifications from "expo-notifications";
 import * as Device from "expo-device";
 
 import { http } from "./http";
+import { shouldUseMockApi } from "../dev/mockApi";
 
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -37,5 +38,6 @@ export async function registerForPushNotifications(): Promise<string | null> {
 export async function sendPushTokenToBackend(token: string): Promise<void> {
   // Backend to implement: POST /notifications/register
   // Body can be extended later (userId, deviceId, platform, locale, etc.)
+  if (await shouldUseMockApi()) return;
   await http.post("/notifications/register", { token });
 }
