@@ -16,10 +16,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "fr.adabin.eatsafe",
-      "associatedDomains": [
-        "applinks:eatsafe.adabin.fr"
-      ],
+      "associatedDomains": ["applinks:eatsafe.adabin.fr"],
       "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false,
         "NSLocationWhenInUseUsageDescription": "Votre position est utilisée pour afficher les restaurants autour de vous."
       }
     },
@@ -33,10 +32,7 @@
         {
           "action": "VIEW",
           "autoVerify": true,
-          "category": [
-            "BROWSABLE",
-            "DEFAULT"
-          ],
+          "category": ["BROWSABLE", "DEFAULT"],
           "data": [
             {
               "scheme": "https",
@@ -56,9 +52,7 @@
     "web": {
       "favicon": "./assets/favicon.png"
     },
-    "plugins": [
-      "expo-sqlite"
-    ],
+    "plugins": ["expo-sqlite"],
     "extra": {
       "eas": {
         "projectId": "525c0dfb-f356-4675-9e13-1848fb7d55e7"
